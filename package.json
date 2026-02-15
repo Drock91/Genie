@@ -1,0 +1,25 @@
+{
+  "name": "agent-system",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test src/**/*.test.js",
+    "lint": "eslint src/",
+    "logs": "tail -f logs/*.log"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "description": "",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.3",
+    "@google/generative-ai": "^0.17.0",
+    "dotenv": "^17.3.1",
+    "execa": "^9.6.1",
+    "openai": "^6.22.0",
+    "simple-git": "^3.31.1"
+  }
+}
