@@ -1,6 +1,7 @@
 import { BaseAgent } from "./baseAgent.js";
 import { makeAgentOutput } from "../models.js";
 import { llmJson } from "../llm/openaiClient.js";
+import { consensusCall } from "../llm/multiLlmSystem.js";
 import { ManagerPlanSchema } from "../llm/schemas.js";
 
 export class ManagerAgent extends BaseAgent {
@@ -9,7 +10,7 @@ export class ManagerAgent extends BaseAgent {
   }
 
     async plan({ userInput, iteration, traceId }) {
-    this.info({ traceId, iteration }, "Planning work items (LLM)");
+    this.info({ traceId, iteration }, "Planning work items with multi-LLM consensus");
 
     const system = [
       "You are the Manager agent in a multi-agent software pipeline.",
@@ -23,20 +24,109 @@ export class ManagerAgent extends BaseAgent {
       "Decide kind=text for writing tasks, kind=code for software tasks."
     ].join("\n");
 
-    const planJson = await llmJson({
-      model: "gpt-5.2", // or whatever model you choose
+    // Use multi-LLM consensus for important planning decision
+    const result = await consensusCall({
+      profile: "accurate", // Use best models for planning - critical decision
       system,
       user,
       schema: ManagerPlanSchema,
       temperature: 0.1
     });
 
+    const planJson = result.consensus;
+
+    this.info({
+      traceId,
+      iteration,
+      agreement: (result.metadata.totalSuccessful / result.metadata.totalRequested * 100).toFixed(1) + "%",
+      reasoning: result.reasoning
+    }, "Plan generated with consensus");
+
     return {
       traceId,
       iteration,
       goal: userInput,
-      ...planJson
+      ...planJson,
+      consensusMetadata: {
+        modelsUsed: result.metadata.totalSuccessful,
+        agreement: (result.metadata.totalSuccessful / result.metadata.totalRequested * 100).toFixed(1) + "%"
+      }
     };
+  }
+
+
+  /**
+   * Analyze request complexity using multi-LLM consensus
+   */
+  async analyzeComplexity(userInput) {
+    this.info({ userInput }, "Analyzing request complexity with multi-LLM");
+
+    try {
+      const result = await consensusCall({
+        profile: "balanced",
+        system: "You are an expert project manager analyzing request complexity.",
+        user: `Analyze the complexity of this request:\n${userInput}`,
+        schema: {
+          name: "complexity_analysis",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["complexity_level", "estimated_effort", "risks"],
+            properties: {
+              complexity_level: { type: "string", enum: ["simple", "medium", "complex", "very_complex"] },
+              estimated_effort: { type: "string" },
+              risks: {
+                type: "array",
+                items: { type: "string" }
+              }
+            }
+          }
+        },
+        temperature: 0.1
+      });
+
+      return result.consensus;
+    } catch (err) {
+      this.error({ error: err.message }, "Complexity analysis failed");
+      throw err;
+    }
+  }
+
+  /**
+   * Generate team recommendations using multi-LLM consensus
+   */
+  async recommendTeam(complexity, requirements) {
+    this.info({ complexity, requirements }, "Recommending team with multi-LLM");
+
+    try {
+      const result = await consensusCall({
+        profile: "balanced",
+        system: "You are an HR expert recommending team composition.",
+        user: `For this complexity level (${complexity}) and requirements:\n${requirements}\n\nWho should be on the team?`,
+        schema: {
+          name: "team_recommendation",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["roles", "count", "notes"],
+            properties: {
+              roles: {
+                type: "array",
+                items: { type: "string" }
+              },
+              count: { type: "number" },
+              notes: { type: "string" }
+            }
+          }
+        },
+        temperature: 0.2
+      });
+
+      return result.consensus;
+    } catch (err) {
+      this.error({ error: err.message }, "Team recommendation failed");
+      throw err;
+    }
   }
 
 
