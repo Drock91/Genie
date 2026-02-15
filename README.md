@@ -99,12 +99,19 @@ Simple question:
 # Install dependencies
 npm install
 
+
 # Configure environment
 cp .env.example .env
-# Edit .env with API keys for:
-# - OPENAI_API_KEY
-# - ANTHROPIC_API_KEY  
-# - GOOGLE_API_KEY
+# Edit `.env` and add your API keys for:
+# - `OPENAI_API_KEY` (required)
+# - `ANTHROPIC_API_KEY` (recommended for Claude support)
+# - `GOOGLE_API_KEY` (recommended for Gemini support)
+#
+# You can also set the model versions:
+# - `OPENAI_MODEL` (default: gpt-4o)
+# - `ANTHROPIC_MODEL` (default: claude-opus-4-1-20250805)
+# - `GOOGLE_MODEL` (default: gemini-2.0-flash)
+
 
 # Run the system
 npm start
@@ -245,14 +252,15 @@ git add . && git commit -m "description"
 ## Environment Variables
 
 ```bash
+
 # Multi-LLM Setup
-OPENAI_API_KEY=sk-...               # Required
-ANTHROPIC_API_KEY=sk-ant-...        # Optional (fallback to 2 providers)
-GOOGLE_API_KEY=AIza...              # Optional (fallback to 2 providers)
+OPENAI_API_KEY=sk-...               # Required (OpenAI GPT-4o)
+ANTHROPIC_API_KEY=sk-ant-...        # Optional (Claude Opus, recommended)
+GOOGLE_API_KEY=AIza...              # Optional (Gemini, recommended)
 
 # Model Configuration
 OPENAI_MODEL=gpt-4o                 # Default: gpt-4o
-ANTHROPIC_MODEL=claude-opus-4-1     # Default: claude-opus-4-1-20250805
+ANTHROPIC_MODEL=claude-opus-4-1-20250805 # Default: claude-opus-4-1-20250805
 GOOGLE_MODEL=gemini-2.0-flash       # Default: gemini-2.0-flash
 
 # System Behavior
