@@ -208,3 +208,6 @@ export class BackendCoderAgent extends BaseAgent {
       throw err;
     }
   }
+}
+
+export default BackendCoderAgent;

@@ -1,0 +1,14 @@
+{
+  "id": "8b47acc086647-1771184693061",
+  "timestamp": "2026-02-15T19:44:53.064Z",
+  "userInput": "test query",
+  "traceId": "8b47acc086647-1771184693061",
+  "iteration": 5,
+  "success": false,
+  "errors": [
+    "Max iterations reached",
+    "MultiLLM system not initialized. Call initializeMultiLlm() first."
+  ],
+  "executedFiles": [],
+  "duration": 3
+}
