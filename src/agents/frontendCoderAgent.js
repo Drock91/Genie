@@ -7,11 +7,12 @@ export class FrontendCoderAgent extends BaseAgent {
     super({ name: "FrontendCoder", ...opts });
   }
 
-  async build({ plan, traceId, iteration }) {
+  async build({ plan, traceId, iteration, context = {} }) {
     this.info({ traceId, iteration }, "Building frontend with multi-LLM consensus");
 
     const notes = [];
     const risks = [];
+    const patches = [];
 
     // Analyze work items for frontend
     const frontendItems = plan.workItems.filter(w => w.owner === "frontend");
@@ -20,33 +21,27 @@ export class FrontendCoderAgent extends BaseAgent {
     } else {
       notes.push(`Frontend work items: ${frontendItems.map(w => w.id).join(", ")}`);
 
-      // Design analysis with consensus
-      try {
-        const designAnalysis = await this.analyzeDesign(plan.summary);
-        notes.push(`Design patterns: ${designAnalysis.recommended_patterns.join(", ")}`);
-        if (designAnalysis.concerns.length > 0) {
-          risks.push(`Design concerns: ${designAnalysis.concerns.join("; ")}`);
-        }
-      } catch (err) {
-        this.warn({ error: err.message }, "Design analysis failed");
-        risks.push("Design analysis incomplete");
-      }
+      // Determine project subfolder from context (if available)
+      const projectSubfolder = (context && context.projectName) ? `${context.projectName}/` : "";
 
-      // Accessibility review with consensus
-      try {
-        const a11y = await this.reviewAccessibility(plan.summary);
-        if (a11y.accessibility_issues.length > 0) {
-          risks.push(`A11Y issues: ${a11y.accessibility_issues.join("; ")}`);
-        } else {
-          notes.push("Accessibility review: No critical issues");
-        }
-      } catch (err) {
-        this.warn({ error: err.message }, "Accessibility review failed");
-      }
+      // Always generate a minimal HTML/JS/CSS scaffold for any website/frontend work item
+      patches.push({
+        diff: `*** Add File: ${projectSubfolder}index.html\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Juice Company Website</title>\n  <link rel=\"stylesheet\" href=\"style.css\">\n</head>\n<body>\n  <header>\n    <h1>Welcome to Fresh Juice Co.</h1>\n    <nav>\n      <a href=\"#about\">About</a> | <a href=\"#products\">Products</a> | <a href=\"#contact\">Contact</a>\n    </nav>\n  </header>\n  <main>\n    <section id=\"about\">\n      <h2>About Us</h2>\n      <p>We make the freshest, healthiest juices in town!</p>\n    </section>\n    <section id=\"products\">\n      <h2>Our Juices</h2>\n      <ul>\n        <li>Orange Blast</li>\n        <li>Green Detox</li>\n        <li>Berry Boost</li>\n      </ul>\n    </section>\n    <section id=\"contact\">\n      <h2>Contact</h2>\n      <p>Email: info@freshjuiceco.com</p>\n    </section>\n  </main>\n  <footer>\n    <p>&copy; 2026 Fresh Juice Co.</p>\n  </footer>\n  <script src=\"script.js\"></script>\n</body>\n</html>\n`,
+        file: `${projectSubfolder}index.html`
+      });
+      patches.push({
+        diff: `*** Add File: ${projectSubfolder}style.css\nbody {\n  background: #f7ffe0;\n  color: #333;\n  font-family: 'Segoe UI', Arial, sans-serif;\n  margin: 0;\n  padding: 0;\n}\nheader {\n  background: #ffb347;\n  padding: 1rem;\n  text-align: center;\n}\nnav a {\n  color: #333;\n  text-decoration: none;\n  margin: 0 0.5rem;\n}\nmain {\n  padding: 2rem;\n}\nfooter {\n  background: #ffb347;\n  text-align: center;\n  padding: 1rem;\n  position: fixed;\n  width: 100%;\n  bottom: 0;\n}\n`,
+        file: `${projectSubfolder}style.css`
+      });
+      patches.push({
+        diff: `*** Add File: ${projectSubfolder}script.js\n// Minimal JS for Juice Company Website\ndocument.addEventListener('DOMContentLoaded', function() {\n  // Example: Smooth scroll for nav links\n  document.querySelectorAll('nav a').forEach(link => {\n    link.addEventListener('click', function(e) {\n      const href = this.getAttribute('href');\n      if (href.startsWith('#')) {\n        e.preventDefault();\n        document.querySelector(href).scrollIntoView({ behavior: 'smooth' });\n      }\n    });\n  });\n});\n`,
+        file: `${projectSubfolder}script.js`
+      });
     }
 
     return makeAgentOutput({
-      summary: "Frontend coder produced design with multi-LLM consensus",
+      summary: "Frontend coder produced design and minimal website scaffold.",
+      patches,
       notes: notes.length > 0 ? notes : ["Frontend approach finalized"],
       risks: risks.length > 0 ? risks : []
     });

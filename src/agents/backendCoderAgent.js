@@ -31,7 +31,9 @@ export class BackendCoderAgent extends BaseAgent {
 
           // Extract description and filename from task
           const imagePrompt = this._extractImagePrompt(item.task);
-          const outputPath = this._extractOutputPath(item.task);
+          let outputPath = this._extractOutputPath(item.task);
+          // Remove any leading 'output/' or './output/' from path
+          outputPath = outputPath.replace(/^\.?\/?output\//, "");
 
           const imageData = await generateImage({
             prompt: imagePrompt,

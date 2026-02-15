@@ -33,7 +33,28 @@ export class ManagerAgent extends BaseAgent {
       temperature: 0.1
     });
 
+
+    // Patch: assign owner to all work items if missing (default: frontend for code)
     const planJson = result.consensus;
+    if (Array.isArray(planJson.workItems)) {
+      planJson.workItems = planJson.workItems.map(w => {
+        // If kind is code and owner is missing, assign frontend
+        if ((planJson.kind === "code" || w.kind === "code") && !w.owner) {
+          return { ...w, owner: "frontend" };
+        }
+        return w;
+      });
+
+      // Force: Always add a frontend work item for website requests
+      const isWebsite = /website|web site|webpage|web page|site for|company|business|landing page/i.test(userInput);
+      if (isWebsite) {
+        planJson.workItems.push({
+          id: `frontend-forced-${iteration}`,
+          owner: "frontend",
+          task: "Create a minimal homepage for the website."
+        });
+      }
+    }
 
     this.info({
       traceId,

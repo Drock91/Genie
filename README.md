@@ -310,3 +310,45 @@ MIT
 ---
 
 **Learn more:** See [Architecture Expert Network](./ARCHITECTURE_EXPERT_NETWORK.md)
+
+---
+
+# 🟢 For Non-Technical Users: Quick Setup Guide
+
+**You do NOT need to know how to code!**
+
+1. **Install Node.js**
+   - Download from https://nodejs.org (choose LTS version)
+   - Install with default options
+
+2. **Download GENIE**
+   - Click the green "Code" button on GitHub, then "Download ZIP"
+   - Unzip to a folder (e.g., Desktop/Genie)
+
+3. **Open a Terminal/Command Prompt**
+   - On Windows: Press `Win + R`, type `cmd`, press Enter
+   - Use `cd` to go to your Genie folder (e.g., `cd Desktop\Genie`)
+
+4. **Install GENIE's dependencies**
+   - Type: `npm install` and press Enter
+
+5. **Set up your API keys**
+   - Copy `.env.example` to `.env` (type: `copy .env.example .env`)
+   - Open `.env` in Notepad
+   - Paste your OpenAI API key (and optionally Anthropic/Google keys)
+   - Save and close
+
+6. **Run GENIE**
+   - Type: `npm start -- "Your request here"`
+   - Example: `npm start -- "Make a browser shooting game"`
+
+7. **Find your results**
+   - Generated files will appear in the `output` folder
+   - Open `output/index.html` to view your project
+
+---
+
+**Troubleshooting:**
+- If you see errors about missing Node.js, repeat step 1.
+- If you see errors about API keys, check your `.env` file.
+- For help, see the FAQ at the end of this README or ask a technical friend.

@@ -6,10 +6,15 @@ import path from "path";
  * Converts agent outputs into actual file changes on disk.
  */
 export class PatchExecutor {
-  constructor({ workspaceDir = "./output", logger }) {
-    this.workspaceDir = workspaceDir;
+  constructor({ workspaceDir = "./output", projectName = null, logger }) {
+    // If projectName is provided, use output/<projectName> as workspaceDir
+    if (projectName) {
+      this.workspaceDir = path.join(workspaceDir, projectName);
+    } else {
+      this.workspaceDir = workspaceDir;
+    }
     this.logger = logger;
-    this.ensureDir(workspaceDir);
+    this.ensureDir(this.workspaceDir);
   }
 
   ensureDir(dir) {
@@ -71,8 +76,24 @@ export class PatchExecutor {
    * Real implementation would use 'patch' command or library
    */
   applyDiff(diff, context = {}) {
-    // For now, return a placeholder
-    // In production, use git apply or patch-utils
+    // Handle simple '*** Add File: <path>\n<content>' diffs
+    const addFileMatch = diff.match(/^\*\*\* Add File: ([^\n]+)\n([\s\S]*)$/m);
+    if (addFileMatch) {
+      const relPath = addFileMatch[1].replace(/^output\//, "");
+      const content = addFileMatch[2];
+      const filePath = path.join(this.workspaceDir, relPath);
+      try {
+        this.ensureDir(path.dirname(filePath));
+        fs.writeFileSync(filePath, content, "utf-8");
+        this.logger?.info({ path: relPath, filePath, contentPreview: content.slice(0, 100) }, "File written (from diff, diagnostic)");
+        return { path: relPath, success: true, fullPath: filePath };
+      } catch (err) {
+        this.logger?.error({ error: err.message, relPath, filePath }, "Error writing file in applyDiff");
+        return { path: relPath, success: false, error: err.message };
+      }
+    }
+    this.logger?.warn({ diffPreview: diff.slice(0, 200) }, "applyDiff: Diff did not match expected pattern");
+    // For now, return a placeholder for other diff types
     return { success: false, message: "Diff application not yet implemented" };
   }
 
