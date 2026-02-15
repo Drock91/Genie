@@ -1,6 +1,7 @@
 import { BaseAgent } from "./baseAgent.js";
 import { makeAgentOutput } from "../models.js";
 import { generateImage } from "../llm/openaiClient.js";
+import { consensusCall } from "../llm/multiLlmSystem.js";
 
 export class BackendCoderAgent extends BaseAgent {
   constructor(opts) {
@@ -78,4 +79,132 @@ export class BackendCoderAgent extends BaseAgent {
     }
     return "output.png";
   }
-}
+
+  /**
+   * Analyze backend requirements using multi-LLM consensus
+   */
+  async analyzeRequirements(requirements, context = {}) {
+    this.info({ requirements }, "Analyzing requirements with multi-LLM consensus");
+
+    try {
+      const result = await consensusCall({
+        profile: "balanced",
+        system: "You are an expert backend architect analyzing requirements.",
+        user: `Analyze these backend requirements and break them down:\n${requirements}`,
+        schema: {
+          name: "requirement_analysis",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["components", "technologies", "architecture"],
+            properties: {
+              components: {
+                type: "array",
+                items: { type: "string" }
+              },
+              technologies: {
+                type: "array",
+                items: { type: "string" }
+              },
+              architecture: { type: "string" }
+            }
+          }
+        },
+        temperature: 0.1
+      });
+
+      this.info({
+        agreement: result.metadata.totalSuccessful / result.metadata.totalRequested,
+        reasoning: result.reasoning
+      }, "Requirements analysis complete");
+
+      return result.consensus;
+    } catch (err) {
+      this.error({ error: err.message }, "Requirements analysis failed");
+      throw err;
+    }
+  }
+
+  /**
+   * Generate backend code using multi-LLM consensus
+   */
+  async generateCode(requirements, context = {}) {
+    this.info({ requirements }, "Generating backend code with multi-LLM consensus");
+
+    try {
+      const result = await consensusCall({
+        profile: "balanced",
+        system: "You are an expert backend developer writing production-quality code.",
+        user: `Generate backend code for:\n${requirements}`,
+        schema: {
+          name: "backend_code",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["code", "language", "explanation"],
+            properties: {
+              code: { type: "string" },
+              language: { type: "string" },
+              explanation: { type: "string" }
+            }
+          }
+        },
+        temperature: 0.2
+      });
+
+      this.info({
+        agreement: (result.metadata.totalSuccessful / result.metadata.totalRequested * 100).toFixed(1) + "%",
+        models: result.metadata.totalSuccessful
+      }, "Code generation complete");
+
+      return result.consensus;
+    } catch (err) {
+      this.error({ error: err.message }, "Code generation failed");
+      throw err;
+    }
+  }
+
+  /**
+   * Review generated code using multi-LLM consensus
+   */
+  async reviewCode(code, context = {}) {
+    this.info({ codeLength: code.length }, "Reviewing code with multi-LLM consensus");
+
+    try {
+      const result = await consensusCall({
+        profile: "balanced",
+        system: "You are an expert code reviewer checking for bugs, performance, and best practices.",
+        user: `Review this backend code for issues, performance, and improvements:\n\n${code}`,
+        schema: {
+          name: "code_review",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["issues", "suggestions", "score"],
+            properties: {
+              issues: {
+                type: "array",
+                items: { type: "string" }
+              },
+              suggestions: {
+                type: "array",
+                items: { type: "string" }
+              },
+              score: { type: "number", minimum: 0, maximum: 100 }
+            }
+          }
+        },
+        temperature: 0.15
+      });
+
+      this.info({
+        quality_score: result.consensus.score,
+        reviewers: result.metadata.totalSuccessful
+      }, "Code review complete");
+
+      return result.consensus;
+    } catch (err) {
+      this.error({ error: err.message }, "Code review failed");
+      throw err;
+    }
+  }
