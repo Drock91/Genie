@@ -34,5 +34,9 @@ export const logger = {
   },
   error(meta = {}, msg = "") {
     writeLog("ERROR", meta, msg);
+  },
+  debug(meta = {}, msg = "") {
+    // Alias debug to info for compatibility
+    writeLog("DEBUG", meta, msg);
   }
 };
