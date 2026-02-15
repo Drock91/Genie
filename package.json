@@ -1,19 +1,30 @@
 {
-  "name": "agent-system",
+  "name": "genie-ai-company",
   "version": "1.0.0",
   "type": "module",
   "main": "src/index.js",
+  "description": "Fully operational AI company with 20+ specialist agents and multi-LLM consensus",
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
+    "demo": "node src/companyDemo.js",
+    "orchestrator-demo": "node src/orchestratorDemo.js",
+    "generate-project": "node src/repo/projectGeneratorDemo.js",
     "test": "node --test src/**/*.test.js",
     "lint": "eslint src/",
     "logs": "tail -f logs/*.log"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "ai",
+    "agents",
+    "multi-llm",
+    "consensus",
+    "orchestration",
+    "company",
+    "automation"
+  ],
+  "author": "Drock91",
   "license": "MIT",
-  "description": "",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
     "@google/generative-ai": "^0.17.0",
@@ -21,5 +32,8 @@
     "execa": "^9.6.1",
     "openai": "^6.22.0",
     "simple-git": "^3.31.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
