@@ -4,13 +4,14 @@
  */
 
 import { ProjectWriter } from "./projectWriter.js";
-import { getTemplate } from "./templateRegistry.js";
-import { consensusCall } from "../llm/multiLlmSystem.js";
+import { getTemplate, listTemplates } from "./templateRegistry.js";
+import { MultiLlmSystem } from "../llm/multiLlmSystem.js";
 
 export class ProjectGenerator {
-  constructor(logger = null) {
+  constructor(logger = null, multiLlmSystem = null) {
     this.logger = logger;
     this.writer = new ProjectWriter(logger);
+    this.multiLlmSystem = multiLlmSystem || new MultiLlmSystem();
   }
 
   /**
@@ -120,43 +121,34 @@ export class ProjectGenerator {
         ? "\n\nIMPORTANT: Generate WORKING, FUNCTIONAL DEMO CODE that can run immediately after npm install. Include example features, working endpoints, or interactive elements that showcase the project."
         : "";
 
-      const result = await consensusCall({
+      const prompt = `Enhance this ${template.type} project template for: ${idea}\n\nTemplate: ${template.name}\n\nProvide additional dependencies, configuration options, or file suggestions.${demoInstructions}\n\nReturn JSON with: additional_dependencies (array), recommended_scripts (object), enhancements (array)`;
+
+      const result = await this.multiLlmSystem.consensusCall({
+        prompt,
         profile: "balanced",
-        system: "You are an expert software architect reviewing a project template and enhancing it based on requirements.",
-        user: `Enhance this ${template.type} project template for: ${idea}\n\nTemplate: ${template.name}\n\nProvide additional dependencies, configuration options, or file suggestions.${demoInstructions}`,
-        schema: {
-          name: "project_enhancements",
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            required: ["additional_dependencies", "recommended_scripts", "enhancements"],
-            properties: {
-              additional_dependencies: {
-                type: "array",
-                items: { type: "string" }
-              },
-              recommended_scripts: {
-                type: "object",
-                additionalProperties: { type: "string" }
-              },
-              enhancements: {
-                type: "array",
-                items: { type: "string" }
-              }
-            }
-          }
-        },
         temperature
       });
 
+      // Parse result from consensus - handle different response formats
+      let enhancements = {};
+      if (typeof result === "string") {
+        try {
+          enhancements = JSON.parse(result);
+        } catch (e) {
+          this.logger?.warn({ error: e.message }, "Failed to parse consensus result");
+        }
+      } else {
+        enhancements = result;
+      }
+
       this.logger?.info({
-        dependencies: result.consensus.additional_dependencies.length,
-        scripts: Object.keys(result.consensus.recommended_scripts).length,
+        dependencies: enhancements.additional_dependencies?.length || 0,
+        scripts: Object.keys(enhancements.recommended_scripts || {}).length,
         demoMode: includeDemo
       }, "Consensus enhancements received");
 
       // Merge additional dependencies
-      const additionalDeps = result.consensus.additional_dependencies.reduce((acc, dep) => {
+      const additionalDeps = (enhancements.additional_dependencies || []).reduce((acc, dep) => {
         const [name, version] = dep.includes("@") ? dep.split("@").slice(-2) : dep.split("@");
         acc[name] = version || "latest";
         return acc;
@@ -164,8 +156,8 @@ export class ProjectGenerator {
 
       return {
         additionalDependencies: additionalDeps,
-        scripts: result.consensus.recommended_scripts,
-        enhancements: result.consensus.enhancements,
+        scripts: enhancements.recommended_scripts || {},
+        enhancements: enhancements.enhancements || [],
         demoMode: includeDemo
       };
     } catch (err) {
@@ -244,7 +236,6 @@ export class ProjectGenerator {
    * List available templates
    */
   listTemplates() {
-    const { listTemplates } = await import("./templateRegistry.js");
     return listTemplates();
   }
 
