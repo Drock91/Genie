@@ -99,8 +99,19 @@ class MultiLlmSystem {
       consensusMethod = "voting"
     } = config;
 
+    // Get the profile's LLM configs
+    let llmConfigs = LLM_PROFILES[profile] || LLM_PROFILES.balanced;
+    
+    // Filter to only include available providers
+    llmConfigs = await this.orchestrator._filterAvailableProviders(llmConfigs);
+    
+    if (llmConfigs.length === 0) {
+      this.logger?.error({ profile }, "No available providers for profile after filtering");
+      throw new Error(`No available LLM providers for profile '${profile}'. Please set API keys: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY`);
+    }
+
     return await this.orchestrator.consensusCall({
-      llmConfigs: LLM_PROFILES[profile] || LLM_PROFILES.balanced,
+      llmConfigs,
       system,
       user,
       schema,

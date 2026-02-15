@@ -123,11 +123,13 @@ export class AnthropicProvider {
 
   async healthCheck() {
     try {
+      if (!process.env.ANTHROPIC_API_KEY) {
+        return false;
+      }
       if (!this.client) {
-        assertKey();
         this._initializeClient();
       }
-      return true;
+      return !!this.client;
     } catch {
       return false;
     }

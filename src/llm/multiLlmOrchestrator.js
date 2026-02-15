@@ -30,9 +30,19 @@ export class MultiLlmOrchestrator {
       throw new Error("Must specify at least one LLM config");
     }
 
-    this.logger?.info({ llmCount: llmConfigs.length }, "Starting multi-LLM call");
+    // Filter out LLM configs whose providers don't have API keys
+    const availableLlmConfigs = await this._filterAvailableProviders(llmConfigs);
+    
+    if (availableLlmConfigs.length === 0) {
+      throw new Error("No LLM providers available. Please set required API keys: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY");
+    }
 
-    const promises = llmConfigs.map(async (llmConfig) => {
+    this.logger?.info({ 
+      requestedCount: llmConfigs.length, 
+      availableCount: availableLlmConfigs.length 
+    }, "Starting multi-LLM call with available providers");
+
+    const promises = availableLlmConfigs.map(async (llmConfig) => {
       try {
         const result = await this._callSingleLlm(llmConfig, system, user, schema, temperature);
         return {
@@ -58,7 +68,8 @@ export class MultiLlmOrchestrator {
     const results = responses.map(r => r.value).filter(r => r);
 
     this.logger?.info({
-      total: llmConfigs.length,
+      requested: llmConfigs.length,
+      available: availableLlmConfigs.length,
       successful: results.filter(r => r.status === "success").length,
       failed: results.filter(r => r.status === "failed").length
     }, "Multi-LLM call complete");
@@ -68,6 +79,7 @@ export class MultiLlmOrchestrator {
       timestamp: new Date().toISOString(),
       metadata: {
         totalRequested: llmConfigs.length,
+        totalAvailable: availableLlmConfigs.length,
         totalSuccessful: results.filter(r => r.status === "success").length,
         totalFailed: results.filter(r => r.status === "failed").length
       }
@@ -167,6 +179,37 @@ export class MultiLlmOrchestrator {
       temperature,
       consensusMethod: "voting"
     });
+  }
+
+  /**
+   * Private: Filter LLM configs to only include those with available providers
+   */
+  async _filterAvailableProviders(llmConfigs) {
+    const available = [];
+    
+    for (const llmConfig of llmConfigs) {
+      const { provider } = llmConfig;
+      const providerInstance = this.providers[provider];
+      
+      if (!providerInstance) {
+        this.logger?.debug({ provider }, "Provider not registered, skipping");
+        continue;
+      }
+      
+      try {
+        const isHealthy = await providerInstance.healthCheck?.();
+        if (isHealthy) {
+          available.push(llmConfig);
+          this.logger?.debug({ provider, model: llmConfig.model }, "Provider available");
+        } else {
+          this.logger?.debug({ provider, model: llmConfig.model }, "Provider API key missing, skipping");
+        }
+      } catch (err) {
+        this.logger?.debug({ provider, error: err.message }, "Provider healthcheck failed, skipping");
+      }
+    }
+    
+    return available;
   }
 
   /**
