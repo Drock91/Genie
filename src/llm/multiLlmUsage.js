@@ -1,6 +1,6 @@
 /**
  * Multi-LLM Usage Example & Integration Guide
- * Shows how to integrate multi-LLM consensus into your agent system
+ * Shows how to integrate multi-LLM consensus into Genie
  */
 
 import MultiLlmOrchestrator from "./multiLlmOrchestrator.js";

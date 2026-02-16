@@ -1,4 +1,4 @@
-# Agent System Architecture - Expert Network Design
+# Genie Architecture - Expert Network Design
 
 ## Overview
 Transform from fixed agents to a dynamic expert network system that scales from simple tasks to enterprise SaaS projects.
