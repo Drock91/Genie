@@ -13,7 +13,7 @@
   "keywords": [],
   "author": "",
   "license": "MIT",
-  "description": "",
+  "description": "Genie - AI-powered multi-agent system that orchestrates specialized AI agents to autonomously handle software development workflows",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
     "@google/generative-ai": "^0.17.0",
