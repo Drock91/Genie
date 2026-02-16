@@ -39,7 +39,7 @@ Keep the user's core intent but make it crystal clear and complete.`,
           schema: {
             type: "object",
             additionalProperties: false,
-            required: ["refined_request", "clarifications", "assumptions", "confidence_score"],
+            required: ["refined_request", "clarifications", "assumptions", "missing_info", "confidence_score", "suggested_departments"],
             properties: {
               refined_request: {
                 type: "string",

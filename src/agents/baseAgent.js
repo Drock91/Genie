@@ -14,6 +14,10 @@ export class BaseAgent {
     this.logger?.warn?.({ agent: this.name, ...meta }, msg);
   }
 
+  error(meta, msg) {
+    this.logger?.error?.({ agent: this.name, ...meta }, msg);
+  }
+
   // Override in subclasses
   async run(_input) {
     return makeAgentOutput({ summary: `${this.name}: no-op` });
