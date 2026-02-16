@@ -1,10 +1,10 @@
 # Genie - AI-Powered Development Agent System
 
-**Genie** is an intelligent, multi-agent AI orchestration system that acts as your autonomous software development team. Like summoning a genie to grant your wishes, Genie transforms your natural language requests into working software solutions.
+**Genie** is an intelligent, multi-agent AI orchestration system that acts as your autonomous software development team. Like summoning a genie to grant your wishes, it transforms your natural language requests into working software solutions.
 
 ## What is Genie?
 
-Genie is a production-ready AI agent framework that orchestrates specialized AI agents to handle complete software development workflows. Instead of manually writing code, configuring systems, or managing tasks, you simply tell Genie what you want to build, and it coordinates a team of expert AI agents to:
+Genie is an AI agent framework designed for production use that orchestrates specialized AI agents to handle complete software development workflows. Instead of manually writing code, configuring systems, or managing tasks, you simply tell Genie what you want to build, and it coordinates a team of expert AI agents to:
 
 - **Plan and architect** your application
 - **Write backend and frontend code** 
