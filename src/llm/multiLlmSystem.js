@@ -1,6 +1,6 @@
 /**
  * Multi-LLM System Initialization
- * Sets up and initializes the multi-LLM orchestrator for use in the agent system
+ * Sets up and initializes the multi-LLM orchestrator for use in Genie
  */
 
 import MultiLlmOrchestrator from "./multiLlmOrchestrator.js";

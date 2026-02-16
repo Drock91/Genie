@@ -1,4 +1,4 @@
-console.log("Super Agent System Booting...");
+console.log("Genie Booting...");
 import "dotenv/config";
 import { logger } from "./util/logger.js";
 import { runWorkflow } from "./workflow.js";

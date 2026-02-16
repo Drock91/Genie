@@ -1,4 +1,4 @@
-# Multi-LLM Integration Guide for Agent System
+# Multi-LLM Integration Guide for Genie
 
 ## What Was Added
 

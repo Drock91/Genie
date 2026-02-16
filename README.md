@@ -1,4 +1,4 @@
-# Agent System
+# Genie
 
 Multi-agent AI orchestration system for software development tasks.
 
