@@ -23,8 +23,6 @@ The "Genie" metaphor represents the system's ability to:
 2. **Grant them intelligently** (autonomous execution with specialized agents)
 3. **Deliver results** (production-ready code and documentation)
 
-Multi-agent AI orchestration system for software development tasks.
-
 ## Features
 
 - **Multi-agent architecture**: Specialized agents for planning, backend, frontend, security, QA, testing, and fixes
