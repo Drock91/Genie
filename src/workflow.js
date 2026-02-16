@@ -1,5 +1,6 @@
 import { writePdf } from "./util/pdfWriter.js";
 import path from "path";
+import fs from "fs";
 
 export async function runWorkflow({ userInput, agents, logger, config, executor = null, store = null }) {
   if (!userInput || typeof userInput !== 'string') {
@@ -32,6 +33,63 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
   const pdfRequested = /\bpdf\b/i.test(userInput);
   const outputFolderMatch = userInput.match(/(?:in|to)\s+(?:the\s+)?output(?:\s+folder)?(?:\s+in\s+(?:a\s+)?folder\s+called\s+)?(["\']?\w+["\']?)?/i);
   const customFolder = outputFolderMatch ? outputFolderMatch[1]?.replace(/["']/g, '') : null;
+
+  // Check if this is a refinement request for existing code
+  const isRefinementRequest = /\b(refine|improve|fix|update|change|modify|enhance|adjust)\b/i.test(userInput);
+  const projectPath = executor ? path.join(executor.workspaceDir) : null;
+  const hasExistingFiles = projectPath && fs.existsSync(projectPath) && fs.readdirSync(projectPath).length > 0;
+
+  // If refinement requested AND files exist, use CodeRefinerAgent
+  if (isRefinementRequest && hasExistingFiles && agents.codeRefiner) {
+    logger.info({ traceId, projectPath, isRefinement: true }, "Detected refinement request for existing code");
+    
+    try {
+      const refinementResult = await agents.codeRefiner.refineExistingCode({
+        userInput,
+        projectPath,
+        filePaths: [] // Auto-detect all code files
+      });
+
+      // Execute the patches
+      if (executor && refinementResult.patches && refinementResult.patches.length > 0) {
+        const execResult = await executor.execute(refinementResult.patches);
+        executedFiles = execResult.files || [];
+        logger.info({ traceId, filesUpdated: execResult.executed }, "Refinement patches applied");
+      }
+
+      const duration = Date.now() - startTime;
+      
+      const result = {
+        traceId,
+        iteration: 1,
+        plan: { kind: 'refinement', goal: userInput },
+        merged: { patches: refinementResult.patches, summary: refinementResult.summary },
+        success: true,
+        executedFiles,
+        refinement: refinementResult.analysis,
+        duration
+      };
+
+      if (store) {
+        store.save({
+          traceId,
+          userInput,
+          iteration: 1,
+          success: true,
+          type: 'refinement',
+          executedFiles,
+          duration
+        });
+      }
+
+      logger.info({ traceId, duration }, "Refinement workflow completed");
+      return result;
+
+    } catch (err) {
+      logger.error({ traceId, error: err.message }, "Refinement failed, falling back to normal workflow");
+      // Fall through to normal workflow if refinement fails
+    }
+  }
 
   logger.info({ traceId, userInput, maxIterations }, "Workflow started");
 

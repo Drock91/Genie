@@ -17,6 +17,7 @@ import { TestRunnerAgent } from "./agents/testRunnerAgent.js";
 import { FixerAgent } from "./agents/fixerAgent.js";
 import { WriterAgent } from "./agents/writerAgent.js";
 import { RequestRefinerAgent } from "./agents/requestRefinerAgent.js";
+import { CodeRefinerAgent } from "./agents/codeRefinerAgent.js";
 import { getConfig } from "./util/config.js";
 import { initializeMultiLlm } from "./llm/multiLlmSystem.js";
 
@@ -61,6 +62,7 @@ function extractProjectName(userInput) {
 
     const agents = {
       refiner: new RequestRefinerAgent({ logger }),
+      codeRefiner: new CodeRefinerAgent({ logger }),
       manager: new ManagerAgent({ logger }),
       backend: new BackendCoderAgent({ logger }),
       frontend: new FrontendCoderAgent({ logger }),
