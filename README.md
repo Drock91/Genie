@@ -93,6 +93,28 @@ Simple question:
 
 ---
 
+## 🎯 Request Refinement System
+
+**NEW:** GENIE now includes an intelligent Request Refiner that automatically:
+- ✅ Analyzes your vague input and clarifies intent
+- ✅ Expands abbreviations and incomplete descriptions  
+- ✅ Adds missing context and technical details
+- ✅ Provides confidence scores (70%+ to auto-refine)
+- ✅ Suggests which departments should handle the request
+
+**Example:**
+```
+Your input:    "make me a website"
+Refined to:    "Create a professional business website with a responsive homepage,
+                about page, contact form, and modern UI design using React and 
+                Node.js backend with a contact submission API endpoint"
+Confidence:    95%
+```
+
+The refiner runs automatically on every request, ensuring maximum precision!
+
+---
+
 ## 🚀 Quick Start
 
 ```bash
@@ -115,6 +137,9 @@ cp .env.example .env
 
 # Run the system
 npm start
+
+# Test request refinement
+npm run refiner-demo -- "your vague request here"
 
 # View organization
 npm run demo

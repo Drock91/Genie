@@ -10,6 +10,7 @@
     "demo": "node src/companyDemo.js",
     "orchestrator-demo": "node src/orchestratorDemo.js",
     "generate-project": "node src/repo/projectGeneratorDemo.js",
+    "refiner-demo": "node src/refinerDemo.js",
     "test": "node --test src/**/*.test.js",
     "lint": "eslint src/",
     "logs": "tail -f logs/*.log"

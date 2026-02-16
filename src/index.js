@@ -16,6 +16,7 @@ import { QAManagerAgent } from "./agents/qaManagerAgent.js";
 import { TestRunnerAgent } from "./agents/testRunnerAgent.js";
 import { FixerAgent } from "./agents/fixerAgent.js";
 import { WriterAgent } from "./agents/writerAgent.js";
+import { RequestRefinerAgent } from "./agents/requestRefinerAgent.js";
 import { getConfig } from "./util/config.js";
 import { initializeMultiLlm } from "./llm/multiLlmSystem.js";
 
@@ -59,6 +60,7 @@ function extractProjectName(userInput) {
     await initializeMultiLlm(logger);
 
     const agents = {
+      refiner: new RequestRefinerAgent({ logger }),
       manager: new ManagerAgent({ logger }),
       backend: new BackendCoderAgent({ logger }),
       frontend: new FrontendCoderAgent({ logger }),
@@ -81,10 +83,29 @@ function extractProjectName(userInput) {
     const health = reporter.generateHealthReport(agents);
     logger.info(health, "Agent health check");
 
+    // Refine user input for precision and accuracy
+    console.log("\n🔄 Refining your request for maximum precision...\n");
+    const refinementResult = await agents.refiner.refineRequest(userInput);
+    agents.refiner.printRefinementResult(refinementResult);
+
+    // Use refined request if confidence is high, otherwise ask user
+    let finalInput = userInput;
+    if (refinementResult.confidence >= 70) {
+      finalInput = refinementResult.refined;
+      logger.info({ 
+        original: userInput, 
+        refined: finalInput, 
+        confidence: refinementResult.confidence 
+      }, "Using refined request");
+    } else {
+      console.log("⚠️  Confidence is low. Using original request. Consider providing more details.\n");
+      logger.warn({ confidence: refinementResult.confidence }, "Low confidence - using original request");
+    }
+
     const startTime = Date.now();
 
     const result = await runWorkflow({
-      userInput,
+      userInput: finalInput,
       agents,
       logger,
       config: { maxIterations: config.maxIterations },
@@ -100,7 +121,9 @@ function extractProjectName(userInput) {
       duration,
       success: result.success,
       iterations: result.iteration,
-      input: userInput
+      input: finalInput,
+      originalInput: userInput,
+      refinementConfidence: refinementResult.confidence
     });
 
     // Generate and print reports
