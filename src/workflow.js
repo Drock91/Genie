@@ -1,3 +1,6 @@
+import { writePdf } from "./util/pdfWriter.js";
+import path from "path";
+
 export async function runWorkflow({ userInput, agents, logger, config, executor = null, store = null }) {
   if (!userInput || typeof userInput !== 'string') {
     throw new Error("Invalid userInput");
@@ -12,6 +15,7 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
     const patterns = [
       /(?:build|create|make)\s+(?:a\s+)?(?:app|project|system|platform|called\s+)?["`']?(\w+)["`']?/i,
       /(?:product|company|service)\s+(?:called|named)\s+["`']?(\w+)["`']?/i,
+      /folder called\s+["`']?(\w+)["`']?/i,
       /^\s*(\w+)\s*(?:app|project|system)/i
     ];
     for (const pattern of patterns) {
@@ -23,6 +27,11 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
     return "Project";
   }
   const projectName = extractProjectName(userInput);
+  
+  // Check if user requested PDF output
+  const pdfRequested = /\bpdf\b/i.test(userInput);
+  const outputFolderMatch = userInput.match(/(?:in|to)\s+(?:the\s+)?output(?:\s+folder)?(?:\s+in\s+(?:a\s+)?folder\s+called\s+)?(["\']?\w+["\']?)?/i);
+  const customFolder = outputFolderMatch ? outputFolderMatch[1]?.replace(/["']/g, '') : null;
 
   logger.info({ traceId, userInput, maxIterations }, "Workflow started");
 
@@ -94,6 +103,39 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
           tests,
           merged
         });
+
+        // Generate PDF if requested
+        if (pdfRequested && plan.kind === "text") {
+          try {
+            const folderName = customFolder || projectName;
+            const outputDir = path.join("./output", folderName);
+            const pdfPath = path.join(outputDir, `${folderName.replace(/\s+/g, '_')}.pdf`);
+            
+            // Extract content from merged outputs
+            const content = merged.notes?.join('\n\n') || "No content generated";
+            const title = userInput.slice(0, 100) + (userInput.length > 100 ? "..." : "");
+            
+            logger.info({ pdfPath, folderName }, "Generating PDF");
+            
+            await writePdf({
+              outputPath: pdfPath,
+              title,
+              text: content
+            });
+            
+            executedFiles.push({
+              path: pdfPath,
+              success: true,
+              fullPath: path.resolve(pdfPath)
+            });
+            
+            logger.info({ pdfPath }, "PDF generated successfully");
+            console.log(`\n📄 PDF created: ${pdfPath}\n`);
+          } catch (pdfError) {
+            logger.error({ error: pdfError.message }, "PDF generation failed");
+            console.log(`\n⚠️  PDF generation failed: ${pdfError.message}\n`);
+          }
+        }
 
         const duration = Date.now() - startTime;
         const result = { traceId, iteration, plan, merged, security, qa, tests, present, success: true, executedFiles };
