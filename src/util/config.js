@@ -16,6 +16,9 @@ export function getConfig() {
     openaiTemp: Number(process.env.OPENAI_TEMPERATURE ?? "0.2"),
     maxIterations: Number(process.env.MAX_ITERATIONS ?? "5"),
     retryAttempts: Number(process.env.RETRY_ATTEMPTS ?? "3"),
-    requestTimeout: Number(process.env.REQUEST_TIMEOUT ?? "60000")
+    requestTimeout: Number(process.env.REQUEST_TIMEOUT ?? "60000"),
+    paidBudgetUsd: Number(process.env.PAID_BUDGET_USD ?? "0"),
+    paidSelectionMode: process.env.PAID_SELECTION_MODE || "round_robin",
+    consensusCount: Number(process.env.CONSENSUS_COUNT ?? "2")
   };
 }

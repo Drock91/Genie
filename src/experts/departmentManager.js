@@ -15,8 +15,6 @@ import { WriterAgent } from "./agents/writerAgent.js";
 import { LegalSpecialistAgent } from "./agents/legalSpecialistAgent.js";
 import { MarketingStrategistAgent } from "./agents/marketingStrategistAgent.js";
 import { AccountingAgent } from "./agents/accountingAgent.js";
-import { PayrollAgent } from "./agents/payrollAgent.js";
-import { HRAgent } from "./agents/hrAgent.js";
 import { DevOpsAgent } from "./agents/devopsAgent.js";
 import { DataAnalystAgent } from "./agents/dataAnalystAgent.js";
 import { CustomerSuccessAgent } from "./agents/customerSuccessAgent.js";
@@ -55,8 +53,6 @@ export class DepartmentManager {
       // Operations Departments
       operations: {
         finance: new AccountingAgent(logger, multiLlmSystem),
-        payroll: new PayrollAgent(logger, multiLlmSystem),
-        hr: new HRAgent(logger, multiLlmSystem),
         compliance: new ComplianceOfficerAgent(logger, multiLlmSystem)
       },
       // Support Departments

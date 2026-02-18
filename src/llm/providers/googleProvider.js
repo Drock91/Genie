@@ -23,7 +23,8 @@ function validateInput(model, system, user, schema) {
   if (!model || typeof model !== "string") throw new Error("Invalid model");
   if (!system || typeof system !== "string") throw new Error("Invalid system prompt");
   if (!user || typeof user !== "string") throw new Error("Invalid user prompt");
-  if (!schema || !schema.name || !schema.schema) throw new Error("Invalid schema");
+  // Schema is optional - if not provided, we'll use regular text generation
+  if (schema && (!schema.name || !schema.schema)) throw new Error("Invalid schema format");
 }
 
 async function sleep(ms) {

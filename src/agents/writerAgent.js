@@ -7,10 +7,27 @@ export class WriterAgent extends BaseAgent {
     super({ name: "Writer", ...opts });
   }
 
-  async build({ plan, traceId, iteration }) {
+  async build({ plan, traceId, iteration, userInput = "" }) {
     this.info({ traceId, iteration }, "Producing textual response with multi-LLM consensus");
 
     try {
+      const outputPath = this._resolveOutputPath(plan, userInput);
+      const explicitContent = this._extractExplicitContent(userInput);
+
+      if (outputPath && explicitContent) {
+        this.info({ outputPath }, "Using explicit content for file output");
+        return makeAgentOutput({
+          summary: `Created ${outputPath}`,
+          patches: [
+            {
+              diff: `*** Add File: ${outputPath}\n${explicitContent}`,
+              file: outputPath
+            }
+          ],
+          notes: [explicitContent]
+        });
+      }
+
       const result = await consensusCall({
         profile: "balanced", // Good balance of style and coherence
         system: "You are an expert writer producing clear, concise, professional responses.",
@@ -30,20 +47,85 @@ export class WriterAgent extends BaseAgent {
         temperature: Number(process.env.OPENAI_TEMPERATURE ?? "0.3") // Slightly higher for creativity
       });
 
+      // Handle case where consensus might be undefined or malformed
+      if (!result || !result.consensus) {
+        this.error({ result: JSON.stringify(result, null, 2) }, "Invalid consensus result structure");
+        throw new Error("Consensus result missing or invalid");
+      }
+
+      // Log what we got back to debug schema issues
+      this.info({ 
+        consensusKeys: Object.keys(result.consensus),
+        hasSummary: !!result.consensus.summary,
+        hasFinal: !!result.consensus.final
+      }, "Consensus structure received");
+
+      // Extract values with fallbacks
+      const summary = result.consensus.summary || plan.goal || "Output generated";
+      const final = result.consensus.final || JSON.stringify(result.consensus, null, 2);
+
       this.info({
-        summary_length: result.consensus.summary.length,
-        final_length: result.consensus.final.length,
-        writers: result.metadata.totalSuccessful
+        summary_length: summary?.length || 0,
+        final_length: final?.length || 0,
+        writers: result.metadata?.totalSuccessful || 0
       }, "Writing completed");
+      const patches = [];
+
+      if (outputPath && final) {
+        patches.push({
+          diff: `*** Add File: ${outputPath}\n${final}`,
+          file: outputPath
+        });
+      }
 
       return makeAgentOutput({
-        summary: result.consensus.summary,
-        notes: [result.consensus.final]
+        summary,
+        patches,
+        notes: [final]
       });
     } catch (err) {
-      this.error({ error: err.message }, "Writing with consensus failed");
+      this.error({ error: err.message, stack: err.stack }, "Writing with consensus failed");
       throw err;
     }
+  }
+
+  _extractExplicitContent(userInput) {
+    const quotedMatch = userInput.match(/contents?:\s*(["'])([\s\S]*?)\1\s*$/i);
+    if (quotedMatch && quotedMatch[2]) {
+      return quotedMatch[2].trim();
+    }
+
+    const match = userInput.match(/contents?:\s*([\s\S]+)$/i);
+    return match && match[1] ? match[1].trim() : null;
+  }
+
+  _resolveOutputPath(plan, userInput) {
+    const workItemFile = plan.workItems?.find(w => w.file)?.file;
+    if (workItemFile) {
+      return workItemFile.replace(/^\.\/?output\//i, "");
+    }
+
+    const fileMatch = userInput.match(/named\s+['"]?([^\s'"]+\.(?:txt|md|json|csv|log|pdf|html|css|js))['"]?/i);
+    const outputMatch = userInput.match(/output\/?([\w\-\/]+)/i);
+    const namedOutputMatch = userInput.match(/output(?:\s+folder)?\s+(?:called|named)\s+['"]?([\w\-\/]+)['"]?/i);
+
+    if (!fileMatch && !outputMatch) {
+      return null;
+    }
+
+    const filename = fileMatch ? fileMatch[1] : "output.txt";
+    const outputPathSource = namedOutputMatch ? namedOutputMatch[1] : (outputMatch ? outputMatch[1] : "");
+    const outputPath = outputPathSource.replace(/\/+$/, "");
+
+    if (outputPath) {
+      const parts = outputPath.split("/").filter(Boolean);
+      if (parts.length > 1) {
+        return `${parts.slice(1).join("/")}/${filename}`;
+      }
+      return filename;
+    }
+
+    return filename;
   }
 
   /**

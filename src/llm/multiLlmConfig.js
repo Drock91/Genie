@@ -5,6 +5,14 @@
 
 export const LLM_CONFIGS = {
   // OpenAI Models
+  OPENAI_GPT4O_MINI: {
+    provider: "openai",
+    model: "gpt-4o-mini",
+    type: "paid",
+    cost: "low",
+    latency: "very-fast",
+    features: ["json-mode", "fast"]
+  },
   OPENAI_GPT4O: {
     provider: "openai",
     model: "gpt-4o",
@@ -41,7 +49,7 @@ export const LLM_CONFIGS = {
   },
   CLAUDE_SONNET: {
     provider: "anthropic",
-    model: "claude-opus-4-1-20250805",
+    model: "claude-sonnet-4-20250514",
     type: "paid",
     cost: "medium",
     latency: "fast",
@@ -49,7 +57,7 @@ export const LLM_CONFIGS = {
   },
   CLAUDE_HAIKU: {
     provider: "anthropic",
-    model: "claude-opus-4-1-20250805",
+    model: "claude-3-5-haiku-20241022",
     type: "paid",
     cost: "low",
     latency: "very-fast",
@@ -68,41 +76,53 @@ export const LLM_CONFIGS = {
 };
 
 /**
+ * Pools used for random or round-robin selection.
+ * Note: "free" here means lowest-cost models from available providers.
+ */
+export const LLM_POOLS = {
+  free: [
+    LLM_CONFIGS.OPENAI_GPT4O_MINI,
+    LLM_CONFIGS.CLAUDE_HAIKU,
+    LLM_CONFIGS.GOOGLE_GEMINI_PRO
+  ],
+  paid: [
+    LLM_CONFIGS.OPENAI_GPT4O,
+    LLM_CONFIGS.CLAUDE_SONNET,
+    LLM_CONFIGS.GOOGLE_GEMINI_PRO
+  ]
+};
+
+/**
  * Preset LLM combinations for different scenarios
  */
 export const LLM_PROFILES = {
   // Maximum quality and consensus - use best paid models
   premium: [
     LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.CLAUDE_OPUS,
-    LLM_CONFIGS.GOOGLE_GEMINI_PRO
+    LLM_CONFIGS.CLAUDE_SONNET
   ],
 
   // Balance quality and cost
   balanced: [
     LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.CLAUDE_SONNET,
-    LLM_CONFIGS.GOOGLE_GEMINI_PRO
+    LLM_CONFIGS.CLAUDE_SONNET
   ],
 
   // Cost-optimized but still good quality
   economical: [
-    LLM_CONFIGS.CLAUDE_SONNET,
-    LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.CLAUDE_SONNET
+    LLM_CONFIGS.OPENAI_GPT4O_MINI,
+    LLM_CONFIGS.CLAUDE_HAIKU
   ],
 
   // Speed-focused for latency-sensitive tasks
   fast: [
-    LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.GOOGLE_GEMINI_PRO,
-    LLM_CONFIGS.CLAUDE_SONNET
+    LLM_CONFIGS.OPENAI_GPT4O_MINI
   ],
 
   // Accuracy-focused with best reasoners
   accurate: [
-    LLM_CONFIGS.CLAUDE_OPUS,
     LLM_CONFIGS.OPENAI_GPT4O,
+    LLM_CONFIGS.CLAUDE_SONNET,
     LLM_CONFIGS.GOOGLE_GEMINI_PRO
   ],
 
@@ -151,6 +171,7 @@ export const selectModels = (options = {}) => {
 
 export default {
   LLM_CONFIGS,
+  LLM_POOLS,
   LLM_PROFILES,
   selectModels
 };

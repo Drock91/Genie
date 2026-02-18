@@ -7,8 +7,8 @@ export class FrontendCoderAgent extends BaseAgent {
     super({ name: "FrontendCoder", ...opts });
   }
 
-  async build({ plan, traceId, iteration, context = {} }) {
-    this.info({ traceId, iteration }, "Building frontend with multi-LLM consensus");
+  async build({ plan, traceId, iteration, context = {}, userInput = "" }) {
+    this.info({ traceId, iteration, receivedUserInput: userInput }, "Building frontend with multi-LLM consensus");
 
     const notes = [];
     const risks = [];
@@ -24,27 +24,108 @@ export class FrontendCoderAgent extends BaseAgent {
       // Determine project subfolder from context (if available)
       const projectSubfolder = (context && context.projectName) ? `${context.projectName}/` : "";
 
-      // Always generate a minimal HTML/JS/CSS scaffold for any website/frontend work item
-      patches.push({
-        diff: `*** Add File: ${projectSubfolder}index.html\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Juice Company Website</title>\n  <link rel=\"stylesheet\" href=\"style.css\">\n</head>\n<body>\n  <header>\n    <h1>Welcome to Fresh Juice Co.</h1>\n    <nav>\n      <a href=\"#about\">About</a> | <a href=\"#products\">Products</a> | <a href=\"#contact\">Contact</a>\n    </nav>\n  </header>\n  <main>\n    <section id=\"about\">\n      <h2>About Us</h2>\n      <p>We make the freshest, healthiest juices in town!</p>\n    </section>\n    <section id=\"products\">\n      <h2>Our Juices</h2>\n      <ul>\n        <li>Orange Blast</li>\n        <li>Green Detox</li>\n        <li>Berry Boost</li>\n      </ul>\n    </section>\n    <section id=\"contact\">\n      <h2>Contact</h2>\n      <p>Email: info@freshjuiceco.com</p>\n    </section>\n  </main>\n  <footer>\n    <p>&copy; 2026 Fresh Juice Co.</p>\n  </footer>\n  <script src=\"script.js\"></script>\n</body>\n</html>\n`,
-        file: `${projectSubfolder}index.html`
-      });
-      patches.push({
-        diff: `*** Add File: ${projectSubfolder}style.css\nbody {\n  background: #f7ffe0;\n  color: #333;\n  font-family: 'Segoe UI', Arial, sans-serif;\n  margin: 0;\n  padding: 0;\n}\nheader {\n  background: #ffb347;\n  padding: 1rem;\n  text-align: center;\n}\nnav a {\n  color: #333;\n  text-decoration: none;\n  margin: 0 0.5rem;\n}\nmain {\n  padding: 2rem;\n}\nfooter {\n  background: #ffb347;\n  text-align: center;\n  padding: 1rem;\n  position: fixed;\n  width: 100%;\n  bottom: 0;\n}\n`,
-        file: `${projectSubfolder}style.css`
-      });
-      patches.push({
-        diff: `*** Add File: ${projectSubfolder}script.js\n// Minimal JS for Juice Company Website\ndocument.addEventListener('DOMContentLoaded', function() {\n  // Example: Smooth scroll for nav links\n  document.querySelectorAll('nav a').forEach(link => {\n    link.addEventListener('click', function(e) {\n      const href = this.getAttribute('href');\n      if (href.startsWith('#')) {\n        e.preventDefault();\n        document.querySelector(href).scrollIntoView({ behavior: 'smooth' });\n      }\n    });\n  });\n});\n`,
-        file: `${projectSubfolder}script.js`
-      });
+      // Generate application-specific code using LLM based on requirements
+      try {
+        const generatedCode = await this.generateAppCode({
+          userInput,
+          workItems: frontendItems,
+          projectName: context.projectName,
+          consensusLevel: context.consensusLevel
+        });
+
+        if (generatedCode && generatedCode.html) {
+          patches.push({
+            diff: `*** Add File: ${projectSubfolder}index.html\n${generatedCode.html}`,
+            file: `${projectSubfolder}index.html`
+          });
+        }
+
+        if (generatedCode && generatedCode.css) {
+          patches.push({
+            diff: `*** Add File: ${projectSubfolder}style.css\n${generatedCode.css}`,
+            file: `${projectSubfolder}style.css`
+          });
+        }
+
+        if (generatedCode && generatedCode.js) {
+          patches.push({
+            diff: `*** Add File: ${projectSubfolder}script.js\n${generatedCode.js}`,
+            file: `${projectSubfolder}script.js`
+          });
+        }
+
+        notes.push("Generated code from LLM consensus");
+      } catch (err) {
+        this.error({ error: err.message }, "Failed to generate code via LLM");
+        throw err;
+      }
     }
 
     return makeAgentOutput({
-      summary: "Frontend coder produced design and minimal website scaffold.",
+      summary: "Frontend coder produced application-specific code.",
       patches,
-      notes: notes.length > 0 ? notes : ["Frontend approach finalized"],
+      notes: notes.length > 0 ? notes : ["Frontend code generated"],
       risks: risks.length > 0 ? risks : []
     });
+  }
+
+  /**
+   * Generate application-specific code using multi-LLM consensus
+   */
+  async generateAppCode({ userInput, workItems, projectName, consensusLevel = "single" }) {
+    this.info({ userInput, workItems: workItems.length }, "Generating application code with multi-LLM");
+
+    try {
+      const result = await consensusCall({
+        profile: "balanced",
+        consensusLevel,
+        system: `You are an expert frontend developer. Generate complete, working HTML5/CSS3/JavaScript code.
+CRITICAL: Return ONLY valid JSON with these exact keys: {"html": "...", "css": "...", "js": "..."}
+Do NOT include markdown, code fences, or any text outside the JSON object.`,
+        user: `Generate code for: ${userInput}
+
+Work items:
+${workItems.map(w => `- ${w.title}`).join('\n')}
+
+Return as JSON object with html, css, js properties. Code must be complete and runnable.`,
+        temperature: 0.3
+      });
+
+      // Extract consensus result
+      const rawResult = result.consensus || result;
+      
+      // If result is a string, try to parse it as JSON
+      let codeResult = rawResult;
+      if (typeof rawResult === 'string') {
+        try {
+          // Extract JSON from string if wrapped in markdown code blocks
+          const jsonMatch = rawResult.match(/\{[\s\S]*\}/);
+          codeResult = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(rawResult);
+        } catch (parseErr) {
+          this.warn({ error: parseErr.message, rawResult: rawResult.substring(0, 200) }, "Failed to parse JSON response");
+          // Return empty code structure
+          codeResult = { html: "", css: "", js: "" };
+        }
+      }
+      
+      // Ensure we have the expected properties
+      if (!codeResult.html) codeResult.html = "";
+      if (!codeResult.css) codeResult.css = "";
+      if (!codeResult.js) codeResult.js = "";
+      
+      this.info({
+        providers: result.responses?.length || 3,
+        htmlSize: codeResult.html?.length || 0,
+        cssSize: codeResult.css?.length || 0,
+        jsSize: codeResult.js?.length || 0,
+        userRequest: userInput.substring(0, 100)
+      }, "Application code generated");
+
+      return codeResult;
+    } catch (err) {
+      this.error({ error: err.message }, "Code generation failed");
+      throw err;
+    }
   }
 
   /**

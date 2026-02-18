@@ -216,26 +216,89 @@ export class MultiLlmOrchestrator {
    * Private: Call a single LLM provider
    */
   async _callSingleLlm(llmConfig, system, user, schema, temperature) {
-    const { provider, model } = llmConfig;
+    const { provider, model, pool = 'unknown' } = llmConfig;
     const providerInstance = this.providers[provider];
 
     if (!providerInstance) {
       throw new Error(`Unknown provider: ${provider}`);
     }
 
-    return await Promise.race([
-      providerInstance.llmJson({
-        model,
-        system,
-        user,
-        schema,
-        temperature,
-        logger: this.logger
-      }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("LLM timeout")), this.timeout)
-      )
-    ]);
+    const callStart = Date.now();
+    
+    try {
+      const result = await Promise.race([
+        providerInstance.llmJson({
+          model,
+          system,
+          user,
+          schema,
+          temperature,
+          logger: this.logger
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("LLM timeout")), this.timeout)
+        )
+      ]);
+
+      const callDuration = Date.now() - callStart;
+
+      // Estimate tokens and cost
+      const promptTokens = Math.ceil((system.length + user.length) / 4);
+      const completionTokens = Math.ceil(JSON.stringify(result).length / 4);
+      const totalTokens = promptTokens + completionTokens;
+      
+      const costPerToken = {
+        "gpt-4o": 0.00001,
+        "gpt-4o-mini": 0.0000005,
+        "claude-opus-4-1-20250805": 0.000015,
+        "claude-sonnet-4-20250514": 0.000008,
+        "gemini-2.0-flash-exp": 0.0000005
+      };
+      const cost = (costPerToken[model] || 0.00001) * totalTokens;
+
+      // Record to global tracker if available
+      if (global.llmUsageTracker && typeof global.llmUsageTracker.recordCall === 'function') {
+        global.llmUsageTracker.recordCall({
+          agent: global.currentAgent || 'unknown',
+          provider,
+          model,
+          pool,
+          promptTokens,
+          completionTokens,
+          totalTokens,
+          cost,
+          duration: callDuration,
+          success: true,
+          purpose: global.currentPurpose || '',
+          consensusUsed: false
+        });
+      }
+
+      return result;
+
+    } catch (err) {
+      const callDuration = Date.now() - callStart;
+      
+      // Record failed call
+      if (global.llmUsageTracker && typeof global.llmUsageTracker.recordCall === 'function') {
+        global.llmUsageTracker.recordCall({
+          agent: global.currentAgent || 'unknown',
+          provider,
+          model,
+          pool,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          cost: 0,
+          duration: callDuration,
+          success: false,
+          purpose: global.currentPurpose || '',
+          consensusUsed: false
+        });
+      }
+
+      throw err;
+    }
   }
 
   /**

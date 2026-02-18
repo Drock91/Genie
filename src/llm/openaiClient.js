@@ -19,7 +19,8 @@ function validateInput(model, system, user, schema) {
   if (!model || typeof model !== 'string') throw new Error("Invalid model");
   if (!system || typeof system !== 'string') throw new Error("Invalid system prompt");
   if (!user || typeof user !== 'string') throw new Error("Invalid user prompt");
-  if (!schema || !schema.name || !schema.schema) throw new Error("Invalid schema");
+  // Schema is optional - if not provided, we'll use regular text generation
+  if (schema && (!schema.name || !schema.schema)) throw new Error("Invalid schema format");
 }
 
 async function sleep(ms) {
@@ -35,23 +36,29 @@ export async function llmJson({ model, system, user, schema, temperature = 0.2, 
     try {
       if (logger) logger.info({ attempt, model }, "LLM request");
 
-      const resp = await Promise.race([
-        client.chat.completions.create({
-          model,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user }
-          ],
-          temperature,
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: schema.name,
-              strict: true,
-              schema: schema.schema
-            }
+      const requestConfig = {
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user }
+        ],
+        temperature
+      };
+
+      // Add JSON schema mode only if schema is provided
+      if (schema && schema.name && schema.schema) {
+        requestConfig.response_format = {
+          type: "json_schema",
+          json_schema: {
+            name: schema.name,
+            strict: true,
+            schema: schema.schema
           }
-        }),
+        };
+      }
+
+      const resp = await Promise.race([
+        client.chat.completions.create(requestConfig),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout')), REQUEST_TIMEOUT_MS))
       ]);
 

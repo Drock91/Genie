@@ -93,7 +93,7 @@ export class CodeRefinerAgent extends BaseAgent {
     }));
 
     const result = await consensusCall({
-      profile: "accurate",
+      profile: "balanced",
       system: `You are an expert code analyst. Given existing code files and a user request, determine which files need to be modified and what specific changes are needed.
 
 Be precise and targeted - only modify what's necessary to fulfill the request.`,
@@ -141,7 +141,7 @@ Analyze which files need changes and what specific modifications are required.`,
     this.info({ filePath, changeCount: changes.length }, "Refining file");
 
     const result = await consensusCall({
-      profile: "accurate",
+      profile: "balanced",
       system: `You are an expert code editor making precise, targeted improvements to existing code.
 
 Rules:

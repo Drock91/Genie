@@ -44,11 +44,14 @@ export class WorkflowReporter {
       kind: plan.kind,
       workItems: plan.workItems?.length || 0,
       acceptanceCriteria: plan.acceptanceCriteria?.length || 0,
-      details: plan.workItems?.map(w => ({
-        id: w.id,
-        owner: w.owner,
-        task: w.task.substring(0, 80) + (w.task.length > 80 ? '...' : '')
-      })) || []
+      details: plan.workItems?.map(w => {
+        const task = typeof w.task === "string" ? w.task : "";
+        return {
+          id: w.id,
+          owner: w.owner,
+          task: task.substring(0, 80) + (task.length > 80 ? '...' : '')
+        };
+      }) || []
     };
   }
 

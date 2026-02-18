@@ -7,7 +7,7 @@ export class QAManagerAgent extends BaseAgent {
     super({ name: "QAManager", ...opts });
   }
 
-  async review({ userInput, traceId, iteration }) {
+  async review({ userInput, traceId, iteration, patches = [], consensusLevel = "single" }) {
     this.info({ traceId, iteration }, "QA review with multi-LLM consensus");
 
     const issues = [];
@@ -26,9 +26,30 @@ export class QAManagerAgent extends BaseAgent {
       );
     }
 
+    // NEW: Check if generated code matches requirements
+    if (patches && patches.length > 0) {
+      try {
+        const codeQuality = await this.validateCodeMatchesRequirements(userInput, patches, consensusLevel);
+        if (codeQuality && !codeQuality.matches_requirements) {
+          issues.push(
+            makeIssue({
+              id: "qa-500",
+              title: "Generated code does not match requirements",
+              severity: Severity.CRITICAL,
+              description: `The generated code does not implement the requested functionality. Requirement: "${userInput.substring(0, 80)}..." Code appears to implement: ${codeQuality.implemented_instead}`,
+              recommendation: ["Regenerate code to match exact user requirements"],
+              area: "requirement-mismatch"
+            })
+          );
+        }
+      } catch (err) {
+        this.warn({ error: err.message }, "Code validation failed, skipping");
+      }
+    }
+
     // Get QA assessment from multi-LLM consensus
     try {
-      const qaResult = await this.assessQuality(userInput);
+      const qaResult = await this.assessQuality(userInput, consensusLevel);
       
       if (qaResult && qaResult.critical_issues && qaResult.critical_issues.length > 0) {
         qaResult.critical_issues.forEach((issue, idx) => {
@@ -56,6 +77,7 @@ export class QAManagerAgent extends BaseAgent {
         summary: ok ? "QA gate PASS" : "QA gate FAIL",
         notes: [
           "QA validated with multi-LLM consensus",
+          "Code requirements matching checked",
           "Test cases and edge cases analyzed by 3 LLMs",
           issues.length > 0 ? `Found ${issues.length} issue(s)` : "No issues detected"
         ],
@@ -67,12 +89,13 @@ export class QAManagerAgent extends BaseAgent {
   /**
    * Assess quality using multi-LLM consensus
    */
-  async assessQuality(requirements) {
+  async assessQuality(requirements, consensusLevel = "single") {
     this.info({ requirements }, "Assessing quality with multi-LLM");
 
     try {
       const result = await consensusCall({
         profile: "balanced",
+        consensusLevel,
         system: "You are an expert QA professional assessing requirements quality.",
         user: `Assess the quality of these requirements:\n${requirements}`,
         schema: {
@@ -110,12 +133,13 @@ export class QAManagerAgent extends BaseAgent {
   /**
    * Generate test cases using multi-LLM consensus
    */
-  async generateTestCases(requirements) {
+  async generateTestCases(requirements, consensusLevel = "single") {
     this.info({ requirements }, "Generating test cases with multi-LLM");
 
     try {
       const result = await consensusCall({
         profile: "balanced",
+        consensusLevel,
         system: "You are an expert QA engineer generating comprehensive test cases.",
         user: `Generate test cases for:\n${requirements}`,
         schema: {
@@ -156,14 +180,96 @@ export class QAManagerAgent extends BaseAgent {
   }
 
   /**
+   * Validate that generated code matches user requirements
+   */
+  async validateCodeMatchesRequirements(userInput, patches = [], consensusLevel = "single") {
+    this.info({ patchCount: patches.length }, "Validating code matches requirements");
+
+    try {
+      // Extract code content from patches
+      const codeContent = patches
+        .map(p => p.diff || "")
+        .join("\n");
+
+      const result = await consensusCall({
+        profile: "balanced",
+        consensusLevel,
+        system: `You are an expert code reviewer validating that generated code matches user requirements.
+
+CRITICAL VALIDATION RULES:
+1. Identify what TYPE of application the user requested (calculator, game, website, etc.)
+2. Identify what TYPE of application is in the generated code
+3. If types DO NOT MATCH, it's an automatic FAIL - return matches_requirements: false
+4. Only return true if code correctly implements the EXACT type and functionality requested
+5. Be EXTREMELY strict - ambiguity = fail`,
+        user: `STRICT VALIDATION:
+
+User's Exact Requirement: "${userInput}"
+
+Generated Code to Validate:
+${codeContent.substring(0, 2000)}
+
+Answer these questions FIRST:
+1. What TYPE of application did the user request? (calculator, game, todo app, website, etc.)
+2. What TYPE of application is the generated code? (look at titles, content, purpose)
+3. Do the types match?
+4. Does the code have the EXACT functionality requested?
+
+Return your validation as JSON.`,
+        schema: {
+          name: "code_validation",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["matches_requirements", "implemented_instead", "user_requested_type", "code_type"],
+            properties: {
+              matches_requirements: { 
+                type: "boolean",
+                description: "Does the code match the user requirement?"
+              },
+              implemented_instead: { 
+                type: "string",
+                description: "What did the code actually implement?"
+              },
+              user_requested_type: {
+                type: "string",
+                description: "What type of app did user request?"
+              },
+              code_type: {
+                type: "string",
+                description: "What type of app is in the code?"
+              }
+            }
+          }
+        },
+        temperature: 0.05
+      });
+
+      this.info({
+        matches: result.consensus.matches_requirements,
+        userRequested: result.consensus.user_requested_type,
+        codeType: result.consensus.code_type,
+        implementedInstead: result.consensus.implemented_instead,
+        providers: result.metadata.totalSuccessful
+      }, "Code validation complete");
+
+      return result.consensus;
+    } catch (err) {
+      this.error({ error: err.message }, "Code validation failed");
+      throw err;
+    }
+  }
+
+  /**
    * Identify edge cases using multi-LLM consensus
    */
-  async findEdgeCases(code, requirements) {
+  async findEdgeCases(code, requirements, consensusLevel = "single") {
     this.info({ codeLength: code.length }, "Finding edge cases with multi-LLM");
 
     try {
       const result = await consensusCall({
-        profile: "accurate", // Use better models for edge case detection
+        profile: "balanced", // Use balanced models for edge case detection
+        consensusLevel,
         system: "You are an expert QA professional identifying edge cases and corner scenarios.",
         user: `Identify potential edge cases for this code:\n${code}\n\nRequirements:\n${requirements}`,
         schema: {

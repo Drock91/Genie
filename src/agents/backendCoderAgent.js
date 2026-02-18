@@ -66,31 +66,50 @@ export class BackendCoderAgent extends BaseAgent {
 
   _extractImagePrompt(task) {
     // Try to extract image description from task
-    const match = task.match(/(?:image|picture|generate)\s+(?:of\s+)?(?:a\s+)?(.+?)(?:\s+(?:and|in|to|as)|$)/i);
+    const match = task.match(/(?:image|picture|generate)\s+(?:of\s+)?(?:a\s+)?(.+?)(?:\s+(?:and|in|to|as|file)|$)/i);
     return match ? match[1].trim() : "a beautiful scene";
   }
 
   _extractOutputPath(task) {
-    // Try to extract filename from task (e.g., "weCanDoAnything.png")
-    const match = task.match(/([a-zA-Z0-9_-]+\.(?:png|jpg|jpeg|gif))/i);
-    if (match) {
-      // Check if there's a folder mentioned
-      const folderMatch = task.match(/(?:folder|directory|path)\s+(?:called|named)\s+([a-zA-Z0-9_-]+)/i);
-      const folder = folderMatch ? folderMatch[1] : "";
-      return folder ? `${folder}/${match[1]}` : match[1];
+    // Try to extract filename from task (e.g., "whale.png", "myImage.jpg")
+    const filenameMatch = task.match(/([a-zA-Z0-9_-]+\.(?:png|jpg|jpeg|gif))/i);
+    if (filenameMatch) {
+      return filenameMatch[1];
     }
-    return "output.png";
+
+    // Try to extract subject/theme from task to create meaningful filename
+    const subjectPatterns = [
+      /(?:create|generate|make)\s+(?:a\s+)?(\w+)\s+(?:PNG|image|picture|photo)/i,
+      /(\w+)\s+(?:PNG|image|picture|photo)/i,
+      /(?:about|themed|related to)\s+(\w+)/i
+    ];
+
+    for (const pattern of subjectPatterns) {
+      const match = task.match(pattern);
+      if (match && match[1]) {
+        const subject = match[1].toLowerCase();
+        // Skip generic words
+        if (!['output', 'image', 'picture', 'photo', 'file', 'a', 'an', 'the'].includes(subject)) {
+          return `${subject}.png`;
+        }
+      }
+    }
+
+    // Last resort: use "image.png" instead of "output.png"
+    this.warn({ task }, "Could not extract meaningful filename from task, using 'image.png'");
+    return "image.png";
   }
 
   /**
    * Analyze backend requirements using multi-LLM consensus
    */
-  async analyzeRequirements(requirements, context = {}) {
+  async analyzeRequirements(requirements, context = {}, consensusLevel = "single") {
     this.info({ requirements }, "Analyzing requirements with multi-LLM consensus");
 
     try {
       const result = await consensusCall({
         profile: "balanced",
+        consensusLevel,
         system: "You are an expert backend architect analyzing requirements.",
         user: `Analyze these backend requirements and break them down:\n${requirements}`,
         schema: {

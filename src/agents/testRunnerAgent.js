@@ -122,7 +122,7 @@ export class TestRunnerAgent extends BaseAgent {
 
     try {
       const result = await consensusCall({
-        profile: "accurate", // Use better models for strategy
+        profile: "balanced", // Use balanced models for strategy
         system: "You are a QA strategy expert planning comprehensive testing approaches.",
         user: `Plan a testing strategy for a ${projectType} project with these requirements:\n${requirements}`,
         schema: {

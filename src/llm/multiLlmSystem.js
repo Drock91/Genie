@@ -7,13 +7,24 @@ import MultiLlmOrchestrator from "./multiLlmOrchestrator.js";
 import OpenAIProvider from "./providers/openaiProvider.js";
 import AnthropicProvider from "./providers/anthropicProvider.js";
 import GoogleProvider from "./providers/googleProvider.js";
-import { LLM_PROFILES } from "./multiLlmConfig.js";
+import { LLM_CONFIGS, LLM_POOLS, LLM_PROFILES } from "./multiLlmConfig.js";
 
 class MultiLlmSystem {
   constructor(logger = null) {
     this.logger = logger;
     this.orchestrator = null;
     this.initialized = false;
+    this.paidBudgetUsd = Number(process.env.PAID_BUDGET_USD || "0");
+    this.paidSpentUsd = 0;
+    this.selectionMode = process.env.PAID_SELECTION_MODE || "round_robin";
+    this.poolQueues = {
+      paid: [],
+      free: []
+    };
+    this.poolIndex = {
+      paid: 0,
+      free: 0
+    };
   }
 
   /**
@@ -57,6 +68,8 @@ class MultiLlmSystem {
       const status = await this.orchestrator.getProviderStatus();
       this.logger?.info({ status }, "Provider health check complete");
 
+      this.paidSpentUsd = 0;
+
       this.initialized = true;
       return true;
     } catch (err) {
@@ -96,28 +109,130 @@ class MultiLlmSystem {
       user,
       schema,
       temperature = 0.2,
-      consensusMethod = "voting"
+      consensusMethod = "voting",
+      consensusLevel = "single",
+      pool = null,
+      selectionMode = null
     } = config;
 
-    // Get the profile's LLM configs
-    let llmConfigs = LLM_PROFILES[profile] || LLM_PROFILES.balanced;
+    const desiredPool = pool || (profile === "fast" || profile === "economical" ? "free" : "paid");
+    const mode = selectionMode || this.selectionMode;
+    const desiredCount = consensusLevel === "consensus"
+      ? Number(process.env.CONSENSUS_COUNT || "2")
+      : 1;
+
+    let llmConfigs = await this._selectFromPool(desiredPool, desiredCount, mode, profile);
     
-    // Filter to only include available providers
-    llmConfigs = await this.orchestrator._filterAvailableProviders(llmConfigs);
-    
+    // Add pool information to configs for tracking
+    llmConfigs = llmConfigs.map(cfg => ({ ...cfg, pool: desiredPool }));
+
     if (llmConfigs.length === 0) {
-      this.logger?.error({ profile }, "No available providers for profile after filtering");
-      throw new Error(`No available LLM providers for profile '${profile}'. Please set API keys: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY`);
+      this.logger?.error({ profile, pool: desiredPool }, "No available providers for pool");
+      throw new Error("No available LLM providers for selected pool. Check API keys.");
     }
 
-    return await this.orchestrator.consensusCall({
-      llmConfigs,
-      system,
-      user,
-      schema,
-      temperature,
-      consensusMethod
-    });
+    // Enforce paid budget cap by falling back to free pool when possible
+    if (desiredPool === "paid" && this.paidBudgetUsd > 0) {
+      const estimated = this._estimateCost(llmConfigs);
+      if (this.paidSpentUsd + estimated > this.paidBudgetUsd) {
+        this.logger?.warn(
+          { estimated, spent: this.paidSpentUsd, budget: this.paidBudgetUsd },
+          "Paid budget exceeded, falling back to free pool"
+        );
+        llmConfigs = await this._selectFromPool("free", desiredCount, mode, profile);
+      }
+    }
+
+    try {
+      const result = await this.orchestrator.consensusCall({
+        llmConfigs,
+        system,
+        user,
+        schema,
+        temperature,
+        consensusMethod
+      });
+
+      if (desiredPool === "paid") {
+        this.paidSpentUsd += this._estimateCost(llmConfigs);
+      }
+
+      return result;
+    } catch (err) {
+      // Fallback to free pool if paid providers fail
+      if (desiredPool === "paid") {
+        this.logger?.warn({ error: err.message }, "Paid pool failed, retrying with free pool");
+        const fallbackConfigs = await this._selectFromPool("free", desiredCount, mode, profile);
+        if (fallbackConfigs.length === 0) {
+          throw err;
+        }
+
+        return await this.orchestrator.consensusCall({
+          llmConfigs: fallbackConfigs,
+          system,
+          user,
+          schema,
+          temperature,
+          consensusMethod
+        });
+      }
+
+      throw err;
+    }
+  }
+
+  async _selectFromPool(pool, count, selectionMode, profile) {
+    const poolConfigs = LLM_POOLS[pool] || LLM_PROFILES[profile] || [];
+    let available = await this.orchestrator._filterAvailableProviders(poolConfigs);
+
+    if (available.length === 0) {
+      return [];
+    }
+
+    // Ensure stable distribution with a shuffled queue
+    if (selectionMode === "round_robin") {
+      if (this.poolQueues[pool].length === 0) {
+        this.poolQueues[pool] = this._shuffle([...available]);
+        this.poolIndex[pool] = 0;
+      }
+
+      const picked = [];
+      while (picked.length < Math.min(count, available.length)) {
+        if (this.poolIndex[pool] >= this.poolQueues[pool].length) {
+          this.poolQueues[pool] = this._shuffle([...available]);
+          this.poolIndex[pool] = 0;
+        }
+        picked.push(this.poolQueues[pool][this.poolIndex[pool]]);
+        this.poolIndex[pool] += 1;
+      }
+      return picked;
+    }
+
+    // Random selection
+    return this._shuffle([...available]).slice(0, Math.min(count, available.length));
+  }
+
+  _estimateCost(llmConfigs) {
+    const perCallUsd = {
+      "gpt-4o": 0.02,
+      "gpt-4o-mini": 0.002,
+      "gpt-4-turbo": 0.02,
+      "gpt-3.5-turbo": 0.001,
+      "claude-opus-4-1-20250805": 0.03,
+      "claude-sonnet-4-20250514": 0.015,
+      "claude-3-5-haiku-20241022": 0.003,
+      "gemini-2.0-flash": 0.002
+    };
+
+    return llmConfigs.reduce((sum, cfg) => sum + (perCallUsd[cfg.model] || 0.01), 0);
+  }
+
+  _shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
   }
 
   /**

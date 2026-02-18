@@ -153,7 +153,7 @@ export class FixerAgent extends BaseAgent {
 
     try {
       const result = await consensusCall({
-        profile: "accurate", // Use better models for risk assessment
+        profile: "balanced", // Use balanced models for risk assessment
         system: "You are a risk assessment expert evaluating potential side effects of code fixes.",
         user: `Assess risks for fixing [${issue.severity}] ${issue.title}:\n\nProposed fix:\n${proposedFix}`,
         schema: {

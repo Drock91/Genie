@@ -4,6 +4,11 @@ export class BaseAgent {
   constructor({ name, logger }) {
     this.name = name;
     this.logger = logger;
+    
+    // Set global context for LLM tracking
+    if (typeof global !== 'undefined') {
+      global.currentAgent = this.name;
+    }
   }
 
   info(meta, msg) {

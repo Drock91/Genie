@@ -3,7 +3,7 @@ export const ManagerPlanSchema = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["kind", "workItems", "acceptanceCriteria"],
+    required: ["kind", "workItems", "acceptanceCriteria", "requiredAgents", "consensusLevel"],
     properties: {
       kind: { type: "string", enum: ["text", "code"] },
       workItems: {
@@ -24,6 +24,20 @@ export const ManagerPlanSchema = {
         type: "array",
         minItems: 1,
         items: { type: "string" }
+      },
+      requiredAgents: {
+        type: "object",
+        additionalProperties: false,
+        required: ["security", "qa", "legal"],
+        properties: {
+          security: { type: "boolean" },
+          qa: { type: "boolean" },
+          legal: { type: "boolean" }
+        }
+      },
+      consensusLevel: {
+        type: "string",
+        enum: ["single", "consensus"]
       }
     }
   }

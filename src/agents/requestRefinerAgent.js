@@ -21,7 +21,7 @@ export class RequestRefinerAgent extends BaseAgent {
 
     try {
       const result = await consensusCall({
-        profile: "accurate", // Use most accurate models for understanding intent
+        profile: "economical", // Use cost-effective models for understanding intent
         system: `You are an expert request analyst who refines vague user requests into precise, actionable specifications.
 
 Your job:
@@ -235,24 +235,29 @@ Keep the user's core intent but make it crystal clear and complete.`,
    * Print refinement results to console in a user-friendly format
    */
   printRefinementResult(result) {
+    if (!result) {
+      console.log("⚠️  Request refinement failed or returned no result\n");
+      return;
+    }
+
     console.log("\n" + "=".repeat(80));
     console.log("📝 REQUEST REFINEMENT RESULTS");
     console.log("=".repeat(80));
     
     console.log("\n🔹 ORIGINAL REQUEST:");
-    console.log(`   ${result.original}`);
+    console.log(`   ${result.original || 'N/A'}`);
     
     console.log("\n✨ REFINED REQUEST:");
-    console.log(`   ${result.refined}`);
+    console.log(`   ${result.refined || 'N/A'}`);
     
-    console.log(`\n📊 CONFIDENCE: ${result.confidence}%`);
+    console.log(`\n📊 CONFIDENCE: ${result.confidence || 0}%`);
     
-    if (result.clarifications.length > 0) {
+    if (result.clarifications && result.clarifications.length > 0) {
       console.log("\n🔍 CLARIFICATIONS MADE:");
       result.clarifications.forEach((c, i) => console.log(`   ${i + 1}. ${c}`));
     }
     
-    if (result.assumptions.length > 0) {
+    if (result.assumptions && result.assumptions.length > 0) {
       console.log("\n💭 ASSUMPTIONS:");
       result.assumptions.forEach((a, i) => console.log(`   ${i + 1}. ${a}`));
     }

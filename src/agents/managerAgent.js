@@ -7,6 +7,8 @@ import { ManagerPlanSchema } from "../llm/schemas.js";
 export class ManagerAgent extends BaseAgent {
   constructor(opts) {
     super({ name: "Manager", ...opts });
+    this.consensusManager = opts.consensusManager || null;
+    this.expenseTracker = opts.expenseTracker || null;
   }
 
     async plan({ userInput, iteration, traceId }) {
@@ -15,18 +17,38 @@ export class ManagerAgent extends BaseAgent {
     const system = [
       "You are the Manager agent in a multi-agent software pipeline.",
       "Your job: classify the request as text vs code and generate work items.",
+      "",
+      "KIND CLASSIFICATION RULES:",
+      "- kind='text' for: documentation, text files, articles, reports, descriptions, text content creation",
+      "- kind='code' for: applications, games, websites, backend services, HTML/CSS/JS projects",
+      "",
+      "OWNER ASSIGNMENT RULES:",
+      "- owner='writer' for: all text content (txt, md, doc files), documentation, articles",
+      "- owner='frontend' for: HTML, CSS, JavaScript, user interfaces, web pages",
+      "- owner='backend' for: server code, APIs, databases, scripts, media generation (png/jpg/gif/mp4/video)",
+      "",
+      "IMPORTANT: Creating text files (.txt, .md) should use kind='text' and owner='writer'",
+      "IMPORTANT: Creating images or videos should use kind='code' and owner='backend'",
+      "",
+      "ALSO determine which review agents are needed:",
+      "- security: true if handling payments, auth, data storage, APIs, or sensitive operations",
+      "- qa: always true for code projects",
+      "- legal: true if handling user data, payments, contracts, or compliance requirements",
+      "Set consensusLevel to 'consensus' ONLY for high-risk or complex tasks (security, legal, compliance, payment flows).",
+      "Use consensusLevel 'single' for normal tasks to reduce cost.",
       "Return ONLY JSON that matches the provided schema.",
       "Keep workItems minimal and actionable."
     ].join("\n");
 
     const user = [
       `User request: ${userInput}`,
-      "Decide kind=text for writing tasks, kind=code for software tasks."
+      "Decide kind=text for writing tasks, kind=code for software tasks.",
+      "Determine which review agents are needed based on the request complexity and domain."
     ].join("\n");
 
     // Use multi-LLM consensus for important planning decision
     const result = await consensusCall({
-      profile: "accurate", // Use best models for planning - critical decision
+      profile: "balanced", // Use balanced models for planning - still good quality
       system,
       user,
       schema: ManagerPlanSchema,
@@ -36,6 +58,21 @@ export class ManagerAgent extends BaseAgent {
 
     // Patch: assign owner to all work items if missing (default: frontend for code)
     const planJson = result.consensus;
+    const isMediaRequest = /\b(png|jpe?g|gif|image|video|mp4)\b/i.test(userInput);
+    const isWebsite = /website|web site|webpage|web page|site for|company|business|landing page/i.test(userInput);
+
+    if (isMediaRequest) {
+      planJson.kind = "code";
+      planJson.workItems = [
+        {
+          id: `media-${iteration}`,
+          owner: "backend",
+          task: "Generate the requested media output and save it to the specified output folder."
+        }
+      ];
+      planJson.requiredAgents = { security: false, qa: false, legal: false };
+    }
+
     if (Array.isArray(planJson.workItems)) {
       planJson.workItems = planJson.workItems.map(w => {
         // If kind is code and owner is missing, assign frontend
@@ -46,14 +83,35 @@ export class ManagerAgent extends BaseAgent {
       });
 
       // Force: Always add a frontend work item for website requests
-      const isWebsite = /website|web site|webpage|web page|site for|company|business|landing page/i.test(userInput);
-      if (isWebsite) {
+      if (isWebsite && !isMediaRequest) {
         planJson.workItems.push({
           id: `frontend-forced-${iteration}`,
           owner: "frontend",
           task: "Create a minimal homepage for the website."
         });
       }
+
+      if (isWebsite && /\b(5|five)[-\s]?page\b/i.test(userInput)) {
+        planJson.workItems.push({
+          id: `frontend-pages-${iteration}`,
+          owner: "frontend",
+          task: "Create a 5-page site with separate files: index.html plus overview.html, species.html, habitats.html, conservation.html, fun-facts.html, and link between pages."
+        });
+      }
+    }
+
+    // Set default required agents if not provided by LLM
+    if (!planJson.requiredAgents) {
+      planJson.requiredAgents = {
+        security: false,  // Only if needed
+        qa: planJson.kind === "code",  // Always for code
+        legal: false  // Only if needed
+      };
+    }
+
+    if (!planJson.consensusLevel) {
+      const needsConsensus = planJson.requiredAgents.security || planJson.requiredAgents.legal;
+      planJson.consensusLevel = needsConsensus ? "consensus" : "single";
     }
 
     this.info({
@@ -167,20 +225,124 @@ export class ManagerAgent extends BaseAgent {
     });
   }
 
-async present({ userInput, iteration, traceId, qa, security, tests, merged }) {
+async present({ userInput, iteration, traceId, qa, security, tests, merged, delivery = null }) {
     this.info({ traceId, iteration }, "Presenting result");
     const finalLine = (merged?.notes || []).slice(-1)[0];
 
+    const notes = [
+      `Iteration: ${iteration}`,
+      `QA: ${qa?.ok ? "PASS" : "FAIL"}`,
+      `Security: ${security?.ok ? "PASS" : "FAIL"}`,
+      `Tests: ${tests?.ok ? "PASS" : "FAIL"}`
+    ];
+
+    // Add delivery verification status
+    if (delivery) {
+      notes.push(`Delivery: ${delivery.ok ? "✅ PASS" : "❌ FAIL"}`);
+      if (!delivery.ok && delivery.issues) {
+        notes.push(`Delivery Issues: ${delivery.issues.length}`);
+        delivery.issues.forEach(issue => {
+          notes.push(`  - ${issue.severity}: ${issue.title}`);
+        });
+      }
+    }
+
+    if (finalLine) {
+      notes.push(`Output: ${finalLine}`);
+    }
+
     return makeAgentOutput({
-      summary: `Delivery ready for: "${userInput}"`,
-      notes: [
-        `Iteration: ${iteration}`,
-        `QA: ${qa?.ok ? "PASS" : "FAIL"}`,
-        `Security: ${security?.ok ? "PASS" : "FAIL"}`,
-        `Tests: ${tests?.ok ? "PASS" : "FAIL"}`,
-        finalLine ? `Output: ${finalLine}` : null
-      ].filter(Boolean)
+      summary: delivery?.ok 
+        ? `✅ Delivery ready for: "${userInput}"`
+        : `⚠️ Delivery complete with issues: "${userInput}"`,
+      notes: notes.filter(Boolean)
     });
+  }
+
+  /**
+   * COST OPTIMIZATION: Batch consensus questions for all agents
+   * Instead of each agent calling consensus independently,
+   * Manager calls once with all questions, returns to all agents
+   */
+  async gatherConsensusForTeam({ userInput, questionsNeeded = [] }) {
+    this.info(
+      { questionsNeeded: questionsNeeded.length },
+      "🎯 CENTRALIZED: Gathering consensus for team"
+    );
+
+    if (this.consensusManager) {
+      try {
+        const decisions = await this.consensusManager.getConsensusForMultiple({
+          questions: questionsNeeded,
+          agentName: "Manager",
+          complexity: "medium"
+        });
+
+        this.info(
+          { decisionsCount: Object.keys(decisions).length },
+          "✅ Team consensus ready - agents will use cached results"
+        );
+
+        return decisions;
+      } catch (err) {
+        this.warn({ error: err.message }, "Fallback: using direct consensus");
+        return {};
+      }
+    }
+
+    return {};
+  }
+
+  /**
+   * Get a cached consensus decision instead of calling LLM
+   */
+  async getConsensus({ question, complexity = "medium", agentName = "unknown" }) {
+    if (this.consensusManager) {
+      return await this.consensusManager.getConsensus({
+        question,
+        context: "Manager coordinated decision",
+        agentName,
+        complexity
+      });
+    }
+
+    // Fallback to direct call if manager not available
+    return await consensusCall({
+      profile: "balanced",
+      user: question,
+      temperature: 0.15
+    });
+  }
+
+  /**
+   * Share team consensus with another agent
+   * Prevents duplicate LLM calls
+   */
+  async provideTeamConsensus(agentName, question) {
+    if (this.consensusManager) {
+      return await this.consensusManager.getConsensus({
+        question,
+        agentName,
+        complexity: "balanced",
+        cacheKey: `team-${agentName}-${question.slice(0, 30)}`
+      });
+    }
+    return null;
+  }
+
+  /**
+   * Report on costs and savings
+   */
+  getSavingsReport() {
+    if (!this.consensusManager) {
+      return { message: "ConsensusManager not available" };
+    }
+
+    const stats = this.consensusManager.getStats();
+    return {
+      ...stats,
+      message: `💰 SAVINGS: Hit rate: ${stats.hitRate}, Estimated savings: ${stats.estimatedSavings}`
+    };
   }
 }
 

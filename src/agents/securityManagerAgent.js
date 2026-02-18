@@ -7,7 +7,7 @@ export class SecurityManagerAgent extends BaseAgent {
     super({ name: "SecurityManager", ...opts });
   }
 
-  async review({ userInput, traceId, iteration }) {
+  async review({ userInput, traceId, iteration, consensusLevel = "single" }) {
     this.info({ traceId, iteration }, "Security review with multi-LLM consensus");
 
     const issues = [];
@@ -32,7 +32,7 @@ export class SecurityManagerAgent extends BaseAgent {
 
     // Get threat modeling from multi-LLM consensus
     try {
-      const threatResult = await this.threatModel(userInput);
+      const threatResult = await this.threatModel(userInput, consensusLevel);
       
       if (threatResult && threatResult.critical_threats && threatResult.critical_threats.length > 0) {
         threatResult.critical_threats.forEach((threat, idx) => {
@@ -71,12 +71,13 @@ export class SecurityManagerAgent extends BaseAgent {
   /**
    * Threat modeling using multi-LLM consensus with best models
    */
-  async threatModel(requirements) {
+  async threatModel(requirements, consensusLevel = "single") {
     this.info({ requirements }, "Threat modeling with multi-LLM");
 
     try {
       const result = await consensusCall({
         profile: "premium", // Use all best models for security - cannot compromise
+        consensusLevel,
         system: "You are an expert security architect identifying threats and vulnerabilities.",
         user: `Perform threat modeling for these requirements:\n${requirements}`,
         schema: {
@@ -120,12 +121,13 @@ export class SecurityManagerAgent extends BaseAgent {
   /**
    * Code security audit using multi-LLM consensus
    */
-  async auditCode(code) {
+  async auditCode(code, consensusLevel = "single") {
     this.info({ codeLength: code.length }, "Auditing code with multi-LLM");
 
     try {
       const result = await consensusCall({
-        profile: "accurate", // Expert models for code vulnerability detection
+        profile: "balanced", // Balanced models for code vulnerability detection
+        consensusLevel,
         system: "You are an expert security engineer auditing code for vulnerabilities.",
         user: `Audit this code for security vulnerabilities:\n${code}`,
         schema: {
@@ -166,12 +168,13 @@ export class SecurityManagerAgent extends BaseAgent {
   /**
    * Compliance review using multi-LLM consensus
    */
-  async reviewCompliance(requirements, standards = "OWASP,CWE,PCI-DSS") {
+  async reviewCompliance(requirements, standards = "OWASP,CWE,PCI-DSS", consensusLevel = "single") {
     this.info({ standards }, "Reviewing compliance with multi-LLM");
 
     try {
       const result = await consensusCall({
-        profile: "accurate",
+        profile: "balanced",
+        consensusLevel,
         system: "You are a compliance expert reviewing against security standards.",
         user: `Review compliance for these requirements against ${standards}:\n${requirements}`,
         schema: {

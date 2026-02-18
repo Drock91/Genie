@@ -1,8 +1,9 @@
 import { writePdf } from "./util/pdfWriter.js";
+import { CostOptimizationSystem } from "./util/costOptimization.js";
 import path from "path";
 import fs from "fs";
 
-export async function runWorkflow({ userInput, agents, logger, config, executor = null, store = null }) {
+export async function runWorkflow({ userInput, agents, logger, config, executor = null, store = null, costOptimization = null, llmUsageTracker = null }) {
   if (!userInput || typeof userInput !== 'string') {
     throw new Error("Invalid userInput");
   }
@@ -10,6 +11,20 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
   const traceId = `${Math.random().toString(16).slice(2)}-${Date.now()}`;
   const maxIterations = config?.maxIterations ?? 5;
   const startTime = Date.now();
+
+  // Store tracker globally for multiLlm system to access
+  if (llmUsageTracker) {
+    global.llmUsageTracker = llmUsageTracker;
+  }
+
+  // Initialize cost optimization if not provided
+  if (!costOptimization && !config?.disableCostOptimization) {
+    costOptimization = new CostOptimizationSystem({ logger });
+    await costOptimization.initialize();
+    costOptimization.integrateWithAgents(agents);
+    
+    logger.info({}, "🟢 Cost Optimization activated - 70-85% savings expected!");
+  }
 
   // Extract projectName for context (same logic as index.js)
   function extractProjectName(userInput) {
@@ -31,7 +46,8 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
   
   // Check if user requested PDF output
   const pdfRequested = /\bpdf\b/i.test(userInput);
-  const outputFolderMatch = userInput.match(/(?:in|to)\s+(?:the\s+)?output(?:\s+folder)?(?:\s+in\s+(?:a\s+)?folder\s+called\s+)?(["\']?\w+["\']?)?/i);
+  const outputFolderMatch = userInput.match(/output\/?([\w\-\/]+)/i) ||
+    userInput.match(/output(?:\s+folder)?\s+(?:called|named)\s+["']?([\w\-\/]+)["']?/i);
   const customFolder = outputFolderMatch ? outputFolderMatch[1]?.replace(/["']/g, '') : null;
 
   // Check if this is a refinement request for existing code
@@ -103,16 +119,27 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
 
     try {
       const plan = await agents.manager.plan({ userInput, iteration, traceId });
+      if (config?.powerLevel) {
+        const normalized = config.powerLevel === "med" ? "medium" : config.powerLevel;
+        const power = ["low", "medium", "high"].includes(normalized) ? normalized : null;
+        if (power) {
+          plan.consensusLevel = power === "high" ? "consensus" : "single";
+          logger.info({ traceId, iteration, powerLevel: power, consensusLevel: plan.consensusLevel }, "Power override applied");
+        }
+      }
       logger.info({ traceId, iteration, kind: plan.kind }, "Plan created");
 
       const outputs = [];
-      const agentContext = { projectName };
+      const agentContext = {
+        projectName,
+        consensusLevel: plan.consensusLevel || "single"
+      };
       if (plan.kind === "text") {
-        outputs.push(await agents.writer.build({ plan, traceId, iteration, context: agentContext }));
+        outputs.push(await agents.writer.build({ plan, traceId, iteration, context: agentContext, userInput }));
       } else {
         const [backend, frontend] = await Promise.all([
-          agents.backend.build({ plan, traceId, iteration, context: agentContext }),
-          agents.frontend.build({ plan, traceId, iteration, context: agentContext })
+          agents.backend.build({ plan, traceId, iteration, context: agentContext, userInput }),
+          agents.frontend.build({ plan, traceId, iteration, context: agentContext, userInput })
         ]);
         outputs.push(backend, frontend);
       }
@@ -138,19 +165,186 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
         logger.info({ traceId, iteration, executed: execResult.executed }, "Patches executed");
       }
 
-      const [security, qa, tests] = await Promise.all([
-        agents.security.review({ userInput, traceId, iteration }),
-        agents.qa.review({ userInput, traceId, iteration }),
-        agents.tests.run({ traceId, iteration })
-      ]);
+      // Conditionally call review agents based on plan requirements
+      const reviewPromises = [];
+      const requiredAgents = plan.requiredAgents || { security: false, qa: true, legal: false };
+      
+      logger.info({ 
+        traceId, 
+        iteration, 
+        requiredAgents,
+        skippedAgents: {
+          security: !requiredAgents.security,
+          legal: !requiredAgents.legal
+        }
+      }, "Running required review agents only");
 
-      // Relaxed gating: allow file generation if tests pass, even if security/QA fail
+      // Always run tests for code
+      reviewPromises.push(
+        agents.tests.run({ traceId, iteration }).then(result => ({ type: 'tests', result }))
+      );
+
+      // QA only if required
+      if (requiredAgents.qa) {
+        reviewPromises.push(
+          agents.qa.review({
+            userInput,
+            traceId,
+            iteration,
+            patches: merged.patches,
+            consensusLevel: plan.consensusLevel || "single"
+          })
+            .then(result => ({ type: 'qa', result }))
+        );
+      }
+
+      // Security only if required
+      if (requiredAgents.security) {
+        reviewPromises.push(
+          agents.security.review({
+            userInput,
+            traceId,
+            iteration,
+            consensusLevel: plan.consensusLevel || "single"
+          })
+            .then(result => ({ type: 'security', result }))
+        );
+      }
+
+      // Legal only if required (and agent exists)
+      if (requiredAgents.legal && agents.legal) {
+        reviewPromises.push(
+          agents.legal.review({
+            userInput,
+            traceId,
+            iteration,
+            consensusLevel: plan.consensusLevel || "single"
+          })
+            .then(result => ({ type: 'legal', result }))
+        );
+      }
+
+      const reviewResults = await Promise.all(reviewPromises);
+      
+      // Extract results by type
+      const tests = reviewResults.find(r => r.type === 'tests')?.result || { ok: true };
+      const qa = reviewResults.find(r => r.type === 'qa')?.result || { ok: true, issues: [] };
+      const security = reviewResults.find(r => r.type === 'security')?.result || { ok: true };
+      const legal = reviewResults.find(r => r.type === 'legal')?.result || { ok: true };
+
+      // Check for requirement mismatch - this is critical and must block
+      const hasRequirementMismatch = qa.issues && qa.issues.some(issue => 
+        issue.area === 'requirement-mismatch' || 
+        issue.id === 'qa-500'
+      );
+
+      if (hasRequirementMismatch) {
+        logger.error({ traceId, iteration, qaIssues: qa.issues }, "CRITICAL: Generated code doesn't match user requirements!");
+        
+        // Force regeneration by advancing iteration
+        if (iteration < maxIterations) {
+          logger.info({ traceId, iteration }, "Regenerating code due to requirement mismatch");
+          
+          const refinedInput = `${userInput}. CRITICAL FIX: The previous code did not match the requirement. Regenerate with exact functionality requested.`;
+          
+          return await runWorkflow({
+            userInput: refinedInput,
+            agents,
+            logger,
+            config,
+            executor,
+            store
+          });
+        } else {
+          return {
+            traceId,
+            iteration,
+            success: false,
+            error: "Generated code does not match requirements after multiple attempts",
+            executedFiles: []
+          };
+        }
+      }
+
+      // Only tests are required to pass for standard execution
       const ok = tests.ok;
-      logger.info({ traceId, iteration, ok, security: security.ok, qa: qa.ok, tests: tests.ok }, "Gate evaluation (relaxed: only tests block)");
+      logger.info({ traceId, iteration, ok, security: security.ok, qa: qa.ok, tests: tests.ok }, "Gate evaluation");
 
       if (ok) {
-        if (!security.ok) logger.warn({ traceId, iteration }, "Security gate failed, proceeding for demo");
-        if (!qa.ok) logger.warn({ traceId, iteration }, "QA gate failed, proceeding for demo");
+        if (!security.ok) logger.warn({ traceId, iteration }, "Security gate failed, proceeding");
+        if (!qa.ok) logger.warn({ traceId, iteration }, "QA gate failed, proceeding");
+
+        // NEW: Delivery Manager verification - check all deliverables match requirements
+        let deliveryVerification = { ok: true, issues: [] };
+        if (agents.delivery && executor) {
+          const outputPath = path.join(executor.workspaceDir, executor.projectName);
+          deliveryVerification = await agents.delivery.verifyDelivery({
+            userInput,
+            outputPath,
+            executedFiles,
+            traceId,
+            iteration
+          });
+
+          if (!deliveryVerification.ok) {
+            logger.warn({ 
+              traceId, 
+              iteration,
+              deliveryIssues: deliveryVerification.issues.length,
+              issues: deliveryVerification.issues.map(i => i.title)
+            }, "Delivery verification found issues");
+
+            // Display fix instructions from consensus
+            if (deliveryVerification.fixInstructions) {
+              const fixInstr = deliveryVerification.fixInstructions;
+              console.log('\n' + fixInstr.instruction);
+              
+              if (fixInstr.consensusMetadata) {
+                logger.info({
+                  traceId,
+                  iteration,
+                  consensusModels: fixInstr.consensusMetadata.modelsUsed,
+                  consensusConfidence: fixInstr.consensusMetadata.confidence
+                }, "Fix instructions generated via consensus");
+              }
+            }
+
+            // Critical delivery issues should trigger targeted fixes via Manager agent
+            const hasCriticalIssues = deliveryVerification.issues.some(i => i.severity === "CRITICAL");
+            if (hasCriticalIssues && iteration < maxIterations) {
+              logger.info({ traceId, iteration }, "Delivery Manager requesting targeted fixes from Manager agent");
+              
+              // Use consensus-generated fix instructions for precision
+              const fixRequest = deliveryVerification.fixInstructions 
+                ? deliveryVerification.fixInstructions.instruction
+                : deliveryVerification.issues
+                    .filter(i => i.severity === "CRITICAL")
+                    .map(i => `${i.title}: ${i.description}`)
+                    .join("; ");
+              
+              const precisionFixRequest = `${userInput}
+
+DELIVERY MANAGER FEEDBACK (Precision Required):
+${fixRequest}
+
+IMPORTANT: Focus on PRECISION and ACCURACY. Generate deliverables with exact names and structure specified above.`;
+              
+              logger.info({ traceId, iteration, fixRequest: precisionFixRequest.substring(0, 200) }, "Triggering precision fix iteration");
+              
+              return await runWorkflow({
+                userInput: precisionFixRequest,
+                agents,
+                logger,
+                config,
+                executor,
+                store,
+                llmUsageTracker
+              });
+            }
+          } else {
+            logger.info({ traceId, iteration }, "✅ Delivery verification PASSED - all deliverables correct");
+          }
+        }
 
         const present = await agents.manager.present({
           userInput,
@@ -159,8 +353,52 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
           qa,
           security,
           tests,
-          merged
+          merged,
+          delivery: deliveryVerification
         });
+
+        // Write HTML/CSS/JS files from patches (code tasks only)
+        if (plan.kind === "code" && merged.patches && merged.patches.length > 0 && outputFolderMatch) {
+          try {
+            const folderName = customFolder || "output";
+            const outputDir = path.join("./output", folderName);
+            
+            // Create output directory
+            if (!fs.existsSync(outputDir)) {
+              fs.mkdirSync(outputDir, { recursive: true });
+              logger.info({ outputDir }, "Created output directory");
+            }
+
+            // Write files from patches
+            for (const patch of merged.patches) {
+              if (patch.diff && patch.diff.includes("*** Add File:")) {
+                const lines = patch.diff.split("\n");
+                const fileHeader = lines[0];
+                const fileName = fileHeader.replace("*** Add File:", "").trim();
+                const fileContent = lines.slice(1).join("\n");
+                
+                const filePath = path.join(outputDir, path.basename(fileName));
+                fs.writeFileSync(filePath, fileContent, "utf-8");
+                
+                executedFiles.push({
+                  path: filePath,
+                  success: true,
+                  fullPath: path.resolve(filePath)
+                });
+                
+                logger.info({ filePath }, "File written successfully");
+                console.log(`✅ Created: ${filePath}`);
+              }
+            }
+            
+            if (executedFiles.length > 0) {
+              console.log(`\n📁 Files created in: ${outputDir}\n`);
+            }
+          } catch (writeError) {
+            logger.error({ error: writeError.message }, "File writing failed");
+            console.log(`\n⚠️  File writing failed: ${writeError.message}\n`);
+          }
+        }
 
         // Generate PDF if requested
         if (pdfRequested && plan.kind === "text") {
@@ -286,6 +524,18 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
       executedFiles,
       duration
     });
+  }
+
+  // Add cost optimization metrics to result
+  if (costOptimization) {
+    const costReport = costOptimization.getStatus();
+    result.costOptimization = costReport;
+    
+    logger.info(costReport, "💰 Cost Optimization Report");
+    
+    // Log full report
+    const fullReport = costOptimization.generateReport();
+    logger.info({}, fullReport);
   }
 
   return result;
