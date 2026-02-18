@@ -134,15 +134,39 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
         projectName,
         consensusLevel: plan.consensusLevel || "single"
       };
-      if (plan.kind === "text") {
-        outputs.push(await agents.writer.build({ plan, traceId, iteration, context: agentContext, userInput }));
-      } else {
-        const [backend, frontend] = await Promise.all([
-          agents.backend.build({ plan, traceId, iteration, context: agentContext, userInput }),
-          agents.frontend.build({ plan, traceId, iteration, context: agentContext, userInput })
-        ]);
-        outputs.push(backend, frontend);
+
+      // Determine which agents need to run based on work items
+      const hasWriterWork = plan.workItems?.some(w => w.owner === "writer");
+      const hasBackendWork = plan.workItems?.some(w => w.owner === "backend");
+      const hasFrontendWork = plan.workItems?.some(w => w.owner === "frontend");
+
+      // Run agents in parallel if they have work
+      const agentPromises = [];
+      
+      if (hasWriterWork) {
+        agentPromises.push(agents.writer.build({ plan, traceId, iteration, context: agentContext, userInput }));
       }
+      if (hasBackendWork) {
+        agentPromises.push(agents.backend.build({ plan, traceId, iteration, context: agentContext, userInput }));
+      }
+      if (hasFrontendWork) {
+        agentPromises.push(agents.frontend.build({ plan, traceId, iteration, context: agentContext, userInput }));
+      }
+
+      // If no specific work items, fall back to plan.kind
+      if (agentPromises.length === 0) {
+        if (plan.kind === "text") {
+          agentPromises.push(agents.writer.build({ plan, traceId, iteration, context: agentContext, userInput }));
+        } else {
+          agentPromises.push(
+            agents.backend.build({ plan, traceId, iteration, context: agentContext, userInput }),
+            agents.frontend.build({ plan, traceId, iteration, context: agentContext, userInput })
+          );
+        }
+      }
+
+      const results = await Promise.all(agentPromises);
+      outputs.push(...results);
 
       const merged = await agents.manager.merge({ outputs, traceId, iteration });
       logger.info({ traceId, iteration, patches: merged.patches.length }, "Outputs merged");

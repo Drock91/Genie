@@ -21,8 +21,9 @@ export class FrontendCoderAgent extends BaseAgent {
     } else {
       notes.push(`Frontend work items: ${frontendItems.map(w => w.id).join(", ")}`);
 
-      // Determine project subfolder from context (if available)
-      const projectSubfolder = (context && context.projectName) ? `${context.projectName}/` : "";
+      // Frontend files always go in the root of the project output folder
+      // The executor already sets workspaceDir to output/ProjectName
+      const projectSubfolder = "";
 
       // Generate application-specific code using LLM based on requirements
       try {

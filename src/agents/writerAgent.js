@@ -28,10 +28,44 @@ export class WriterAgent extends BaseAgent {
         });
       }
 
+      // Find the writer work item to get specific instructions
+      const writerWork = plan.workItems?.find(w => w.owner === 'writer');
+      const taskDesc = writerWork ? writerWork.task : plan.goal;
+      
+      // For text files (.txt, .md), generate plain text without schema
+      if (outputPath && (outputPath.endsWith('.txt') || outputPath.endsWith('.md'))) {
+        const result = await consensusCall({
+          profile: "balanced",
+          consensusLevel: "single",
+          system: "You are an expert writer. Generate clear, informative text content in plain text format.",
+          user: `${taskDesc}\n\nOutput plain text only (not JSON). Write the actual content.`,
+          temperature: 0.3
+        });
+
+        // Extract text content
+        const content = typeof result.consensus === 'string' ? result.consensus : 
+                       result.consensus?.final || result.consensus?.content || 
+                       JSON.stringify(result.consensus, null, 2);
+
+        this.info({ outputPath, contentLength: content.length }, "Generated plain text file");
+
+        return makeAgentOutput({
+          summary: `Created ${outputPath}`,
+          patches: [
+            {
+              diff: `*** Add File: ${outputPath}\n${content}`,
+              file: outputPath
+            }
+          ],
+          notes: [content.substring(0, 100) + '...']
+        });
+      }
+
+      // For other outputs, use structured schema
       const result = await consensusCall({
-        profile: "balanced", // Good balance of style and coherence
+        profile: "balanced",
         system: "You are an expert writer producing clear, concise, professional responses.",
-        user: `Generate response for user request: ${plan.goal}`,
+        user: `Generate response for user request: ${taskDesc}`,
         schema: {
           name: "writer_output",
           schema: {
@@ -44,7 +78,7 @@ export class WriterAgent extends BaseAgent {
             }
           }
         },
-        temperature: Number(process.env.OPENAI_TEMPERATURE ?? "0.3") // Slightly higher for creativity
+        temperature: Number(process.env.OPENAI_TEMPERATURE ?? "0.3")
       });
 
       // Handle case where consensus might be undefined or malformed
@@ -100,28 +134,28 @@ export class WriterAgent extends BaseAgent {
   }
 
   _resolveOutputPath(plan, userInput) {
+    // First check if work item specifies a file
     const workItemFile = plan.workItems?.find(w => w.file)?.file;
     if (workItemFile) {
       return workItemFile.replace(/^\.\/?output\//i, "");
     }
 
-    const fileMatch = userInput.match(/named\s+['"]?([^\s'"]+\.(?:txt|md|json|csv|log|pdf|html|css|js))['"]?/i);
-    const outputMatch = userInput.match(/output\/?([\w\-\/]+)/i);
-    const namedOutputMatch = userInput.match(/output(?:\s+folder)?\s+(?:called|named)\s+['"]?([\w\-\/]+)['"]?/i);
+    // Look for filename pattern like "whale.txt" or "facts.txt"
+    const fileMatch = userInput.match(/([\w\-]+\.txt)\b/i) || 
+                      userInput.match(/named\s+['"]?([^\s'"]+\.(?:txt|md|json|csv|log))['"]?/i);
+    
+    // Look for output folder
+    const outputMatch = userInput.match(/output\/([\w\-\/]+)/i);
 
-    if (!fileMatch && !outputMatch) {
-      return null;
+    if (!fileMatch) {
+      return null; // No file to create
     }
 
-    const filename = fileMatch ? fileMatch[1] : "output.txt";
-    const outputPathSource = namedOutputMatch ? namedOutputMatch[1] : (outputMatch ? outputMatch[1] : "");
-    const outputPath = outputPathSource.replace(/\/+$/, "");
-
-    if (outputPath) {
-      const parts = outputPath.split("/").filter(Boolean);
-      if (parts.length > 1) {
-        return `${parts.slice(1).join("/")}/${filename}`;
-      }
+    const filename = fileMatch[1];
+    
+    // If we have output folder, file goes there (executor handles the full path)
+    // Just return the filename since executor.workspaceDir is already set to output/ProjectName
+    if (outputMatch && outputMatch[1]) {
       return filename;
     }
 

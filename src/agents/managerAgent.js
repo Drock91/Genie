@@ -60,43 +60,81 @@ export class ManagerAgent extends BaseAgent {
     const planJson = result.consensus;
     const isMediaRequest = /\b(png|jpe?g|gif|image|video|mp4)\b/i.test(userInput);
     const isWebsite = /website|web site|webpage|web page|site for|company|business|landing page/i.test(userInput);
+    const isMultiPage = /\b([0-9]+|five|ten|multiple)[-\s]?page\b/i.test(userInput);
+    const hasTextFiles = /\.txt\b|text file|facts file/i.test(userInput);
 
+    // Ensure workItems array exists
+    if (!Array.isArray(planJson.workItems)) {
+      planJson.workItems = [];
+    }
+
+    // Handle media requests (images, videos)
     if (isMediaRequest) {
-      planJson.kind = "code";
-      planJson.workItems = [
-        {
+      const hasImageWork = planJson.workItems.some(w => w.owner === 'backend');
+      if (!hasImageWork) {
+        planJson.workItems.push({
           id: `media-${iteration}`,
           owner: "backend",
           task: "Generate the requested media output and save it to the specified output folder."
-        }
-      ];
-      planJson.requiredAgents = { security: false, qa: false, legal: false };
-    }
-
-    if (Array.isArray(planJson.workItems)) {
-      planJson.workItems = planJson.workItems.map(w => {
-        // If kind is code and owner is missing, assign frontend
-        if ((planJson.kind === "code" || w.kind === "code") && !w.owner) {
-          return { ...w, owner: "frontend" };
-        }
-        return w;
-      });
-
-      // Force: Always add a frontend work item for website requests
-      if (isWebsite && !isMediaRequest) {
-        planJson.workItems.push({
-          id: `frontend-forced-${iteration}`,
-          owner: "frontend",
-          task: "Create a minimal homepage for the website."
         });
       }
+    }
 
-      if (isWebsite && /\b(5|five)[-\s]?page\b/i.test(userInput)) {
+    // Handle text file requests (.txt files)
+    if (hasTextFiles) {
+      const hasWriterWork = planJson.workItems.some(w => w.owner === 'writer');
+      if (!hasWriterWork) {
+        // Extract what kind of text file from userInput
+        const textFileMatch = userInput.match(/([\w-]+\.txt)/i);
+        const fileName = textFileMatch ? textFileMatch[1] : 'content.txt';
+        const contentMatch = userInput.match(/with ([\w\s]+) facts?/i) || userInput.match(/about ([\w\s]+)/i);
+        const subject = contentMatch ? contentMatch[1] : 'the topic';
+        
         planJson.workItems.push({
-          id: `frontend-pages-${iteration}`,
-          owner: "frontend",
-          task: "Create a 5-page site with separate files: index.html plus overview.html, species.html, habitats.html, conservation.html, fun-facts.html, and link between pages."
+          id: `writer-${iteration}`,
+          owner: "writer",
+          task: `Create ${fileName} with detailed facts about ${subject}.`
         });
+      }
+    }
+
+    // Assign owner to work items if missing
+    planJson.workItems = planJson.workItems.map(w => {
+      if (!w.owner) {
+        // Default: frontend for code, writer for text
+        if (planJson.kind === "text") {
+          return { ...w, owner: "writer" };
+        } else if (planJson.kind === "code") {
+          return { ...w, owner: "frontend" };
+        }
+      }
+      return w;
+    });
+
+    // Handle website requests - but DON'T add duplicate work items
+    if (isWebsite && !isMediaRequest) {
+      const hasFrontendWork = planJson.workItems.some(w => w.owner === 'frontend');
+      
+      if (!hasFrontendWork) {
+        // No frontend work item yet, add one
+        if (isMultiPage) {
+          // Extract number of pages
+          const pageMatch = userInput.match(/\b([0-9]+)[-\s]?page\b/i);
+          const pageCount = pageMatch ? parseInt(pageMatch[1]) : 5;
+          
+          planJson.workItems.push({
+            id: `frontend-${iteration}`,
+            owner: "frontend",
+            task: `Create a ${pageCount}-page website with index.html and ${pageCount - 1} additional pages. Include navigation between all pages.`
+          });
+        } else {
+          // Single page website
+          planJson.workItems.push({
+            id: `frontend-${iteration}`,
+            owner: "frontend",
+            task: "Create a website with index.html homepage."
+          });
+        }
       }
     }
 
