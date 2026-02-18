@@ -138,6 +138,9 @@ cp .env.example .env
 # Run the system
 npm start
 
+# Run in INTERACTIVE MODE (with approval checkpoints)
+npm start -- --interactive "your request here"
+
 # Test request refinement
 npm run refiner-demo -- "your vague request here"
 
@@ -147,6 +150,90 @@ npm run demo
 # Generate a project
 npm run generate-project
 ```
+
+---
+
+## 🤝 Interactive Mode
+
+**NEW:** Run GENIE with approval checkpoints for iterative, user-controlled workflows!
+
+### How It Works
+Interactive mode pauses at every major step and asks for your approval before proceeding:
+
+1. **Request Refinement** - Review and approve the refined version of your request
+2. **Execution Plan** - See which agents will run and approve the plan
+3. **Execution** - Agents execute with real-time progress updates
+4. **Review Results** - See generated files, summary, and metrics
+5. **Satisfaction Check** - Confirm you're happy or refine further
+
+### Usage
+```bash
+# Run any request with interactive checkpoints
+npm start -- --interactive "build a calculator app"
+
+# Or use the short flag
+npm start -- -i "create a landing page"
+```
+
+### Interactive Flow Example
+```
+🔍 Analyzing request...
+📝 Refined Request:
+   "Create a browser-based calculator application with basic arithmetic
+    operations (+, -, ×, ÷), responsive design, and clean modern UI"
+   
+❓ Approve this refined request? (Y/n): y
+
+📋 Execution Plan:
+   ✓ Product Manager - Define requirements
+   ✓ Frontend Developer - Build calculator UI
+   ✓ QA Manager - Create test plan
+   ✓ Writer - Generate documentation
+   
+❓ Proceed with execution? (Y/n): y
+
+⚙️  Executing workflow...
+   [ProductManager] ✓ Requirements defined
+   [FrontendDeveloper] ✓ Calculator UI built
+   [QAManager] ✓ Tests created
+   [Writer] ✓ Documentation complete
+
+📊 Results:
+   Files Created: 3
+   - output/Calculator/index.html
+   - output/Calculator/style.css
+   - output/Calculator/script.js
+   
+❓ Are you satisfied with the results? (Y/n): no
+
+❓ What's the issue? (e.g., 'wrong type of app', 'missing features', 'wrong design'):
+   > Missing dark mode option
+   
+What would you like to do?
+   1) Refine the request and try again
+   2) Keep results and make manual adjustments
+   3) Cancel and discard results
+   
+Choice: 1
+
+⚙️  Executing refined workflow...
+   [FrontendDeveloper] ✓ Added dark mode toggle
+   [QAManager] ✓ Validation passed
+   
+❓ Are you satisfied now? (Y/n): y
+
+✅ Workflow complete!
+   Iterations: 2
+   Final request: "Create a browser-based calculator app... IMPORTANT: Missing dark mode option"
+```
+
+### Key Features
+- ✅ **Feedback Capture** - When you say "no", describe the issue and it becomes part of the fix
+- ✅ **Auto Regeneration** - If code doesn't match requirements, system automatically regenerates
+- ✅ **Iterative Process** - Keep refining until you're 100% satisfied
+- ✅ **Full Control** - Approve each step before execution
+- ✅ **Transparency** - See exactly which agents run and why
+- ✅ **Confidence** - Review results before completion
 
 ---
 
@@ -343,6 +430,218 @@ MIT
 ---
 
 **Learn more:** See [Architecture Expert Network](./ARCHITECTURE_EXPERT_NETWORK.md)
+
+---
+
+## 🎨 Automatic Image Generation with DALL-E
+
+**New in v1.0:** GENIE now automatically generates professional images for web projects using OpenAI's DALL-E 3 API!
+
+### How It Works
+
+When GENIE creates a website or web application:
+
+1. **Detects missing images** in the generated HTML
+2. **Generates intelligent prompts** from image filenames (e.g., "chocolate-hazelnut.jpg" → detailed gelato description)
+3. **Creates professional images** using DALL-E 3 (1024x1024 PNG, standard quality)
+4. **Embeds images** directly into the HTML with proper file paths
+5. **All automatic** - no extra steps or configuration needed!
+
+### Example: TallahasseeGelato Website
+
+When you request "create a premium gelato shop website called TallahasseeGelato":
+
+```
+✨ Generated 9 professional images automatically:
+   ✅ hero-gelato-shop.jpg (1.2MB)
+   ✅ chocolate-hazelnut.jpg (781KB)
+   ✅ strawberry-basil.jpg (976KB)
+   ✅ mango-passion-fruit.jpg (1.1MB)
+   ✅ sicilian-lemon-sorbetto.jpg (1.1MB)
+   ✅ madagascar-vanilla.jpg (1.4MB)
+   ✅ italian-espresso.jpg (1.3MB)
+   ✅ coconut-lime.jpg (1.2MB)
+   ✅ georgia-peach-cream.jpg (1.1MB)
+```
+
+All images are embedded into the website automatically - **no manual work required!**
+
+### Image Generation Architecture
+
+**Files involved:**
+
+- [`src/agents/imageGeneratorAgent.js`](src/agents/imageGeneratorAgent.js) - Handles DALL-E API calls, downloads images
+- [`src/util/htmlImageEmbedder.js`](src/util/htmlImageEmbedder.js) - Detects missing images, generates smart prompts, embeds URLs
+- [`src/workflow.js`](src/workflow.js) - Integrates image generation as automatic post-processing step
+- [`src/llm/multiLlmSystem.js`](src/llm/multiLlmSystem.js) - Provides top-level image generation API
+
+### Configuration
+
+Image generation requires `OPENAI_API_KEY` in your `.env` file. Configuration in `src/llm/multiLlmConfig.js`:
+
+```javascript
+IMAGE_GENERATION: {
+  provider: 'openai',
+  model: 'dall-e-3',
+  size: '1024x1024',
+  quality: 'standard',
+  style: 'natural'
+}
+```
+
+### Smart Prompt Generation
+
+The system intelligently creates DALL-E prompts from filenames:
+
+```
+Input filename:   chocolate-hazelnut.jpg
+Generated prompt: "A beautiful, vibrant gelato flavor photograph of rich chocolate 
+                   hazelnut gelato in a cone, Italian style, natural lighting, 
+                   appetizing presentation, professional food photography"
+
+Result:           High-quality professional image ✨
+```
+
+---
+
+## 📊 Agent Request/Response Logging
+
+**New in v1.0:** GENIE now tracks all agent requests and outputs in clean, structured logs!
+
+### What Gets Logged
+
+Every agent call is recorded with:
+
+- **Agent Name** - Which agent processed the request
+- **Input Request** - What task was requested
+- **Output Response** - What the agent returned
+- **Status** - Success or failure
+- **Duration** - Execution time in milliseconds
+- **Timestamp** - When it ran
+
+### Log Files
+
+Logs are saved in the `logs/` directory:
+
+```
+logs/
+├── agent-YYYY-MM-DD.log          (detailed JSON logs)
+├── agent-trace-YYYY-MM-DD.json   (agent request/response pairs) ← NEW!
+└── (other log files)
+```
+
+### Viewing Agent Logs
+
+**Agent traces are saved in:** `logs/agent-trace-YYYY-MM-DD.json`
+
+**Format** (JSON):
+```json
+[
+  {
+    "timestamp": "2024-01-15T14:23:45.123Z",
+    "agent": "backend",
+    "request": {
+      "plan": {...},
+      "traceId": "abc123",
+      "iteration": 1
+    },
+    "response": {
+      "summary": "Generated API endpoints for user management...",
+      "patches": [...],
+      "success": true
+    },
+    "metadata": {
+      "success": true,
+      "duration": 2450,
+      "iteration": 1,
+      "traceId": "abc123"
+    }
+  },
+  {...}
+]
+```
+
+### Accessing Logs Programmatically
+
+```javascript
+import SimpleAgentLogger from './src/util/simpleAgentLogger.js';
+
+const logger = new SimpleAgentLogger();
+
+// Log an agent call
+await logger.logAgentCall(
+  'backend',
+  { plan: {...}, userInput: 'create API' },
+  { summary: 'Generated endpoints', patches: [...] },
+  { duration: 2450, iteration: 1, traceId: 'abc123' }
+);
+
+// Save all logs to file
+await logger.saveToFile();
+
+// Get summary
+const summary = logger.getSummary();
+console.log(summary);
+// Output: { totalRecords: 45, uniqueAgents: [...], success: 40, failed: 5, agents: {...} }
+
+// Format as readable text
+const textLog = logger.formatAsText();
+console.log(textLog);
+```
+
+### Example Log Output
+
+```
+════════════════════════════════════════════════════════════════════════════════════════════════════
+AGENT REQUEST/RESPONSE LOG
+════════════════════════════════════════════════════════════════════════════════════════════════════
+Generated: 2024-01-15T14:23:45.123Z
+Total Records: 12
+
+[1] ───────────────────────────────────────────────────────────────
+TIME: 2024-01-15T14:23:45.123Z
+AGENT: manager
+STATUS: ✅ SUCCESS
+───────────────────────────────────────────────────────────────
+
+INPUT REQUEST:
+{ userInput: "create premium gelato shop website", iteration: 1 }
+
+OUTPUT RESPONSE:
+{ kind: 'web', consensusLevel: 'single', workItems: [...] }
+
+DURATION: 1250ms
+
+[2] ───────────────────────────────────────────────────────────────
+TIME: 2024-01-15T14:23:47.234Z
+AGENT: frontend
+STATUS: ✅ SUCCESS
+───────────────────────────────────────────────────────────────
+
+INPUT REQUEST:
+{ plan: {...}, iteration: 1, userInput: "create premium gelato shop website" }
+
+OUTPUT RESPONSE:
+{ summary: "Generated responsive HTML/CSS website...", patches: [...] }
+
+DURATION: 3420ms
+```
+
+### Analyzing Agent Performance
+
+Use the summary to understand agent efficiency:
+
+```javascript
+const summary = logger.getSummary();
+
+console.log(`Total requests: ${summary.totalRecords}`);
+console.log(`Success rate: ${((summary.successCount / summary.totalRecords) * 100).toFixed(1)}%`);
+
+for (const [agent, stats] of Object.entries(summary.agents)) {
+  const rate = ((stats.success / stats.calls) * 100).toFixed(1);
+  console.log(`${agent}: ${stats.calls} calls, ${rate}% success`);
+}
+```
 
 ---
 

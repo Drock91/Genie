@@ -27,9 +27,10 @@ export function makeAgentOutput({
   notes = [],
   risks = [],
   filesRead = [],
-  metrics = {}
+  metrics = {},
+  data = null
 }) {
-  return { summary, patches, actions, notes, risks, filesRead, metrics };
+  return { summary, patches, actions, notes, risks, filesRead, metrics, ...(data && { data }) };
 }
 
 /**

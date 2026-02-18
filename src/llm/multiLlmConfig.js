@@ -82,12 +82,10 @@ export const LLM_CONFIGS = {
 export const LLM_POOLS = {
   free: [
     LLM_CONFIGS.OPENAI_GPT4O_MINI,
-    LLM_CONFIGS.CLAUDE_HAIKU,
     LLM_CONFIGS.GOOGLE_GEMINI_PRO
   ],
   paid: [
     LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.CLAUDE_SONNET,
     LLM_CONFIGS.GOOGLE_GEMINI_PRO
   ]
 };
@@ -99,19 +97,19 @@ export const LLM_PROFILES = {
   // Maximum quality and consensus - use best paid models
   premium: [
     LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.CLAUDE_SONNET
+    LLM_CONFIGS.GOOGLE_GEMINI_PRO
   ],
 
   // Balance quality and cost
   balanced: [
     LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.CLAUDE_SONNET
+    LLM_CONFIGS.GOOGLE_GEMINI_PRO
   ],
 
   // Cost-optimized but still good quality
   economical: [
     LLM_CONFIGS.OPENAI_GPT4O_MINI,
-    LLM_CONFIGS.CLAUDE_HAIKU
+    LLM_CONFIGS.GOOGLE_GEMINI_PRO
   ],
 
   // Speed-focused for latency-sensitive tasks
@@ -122,14 +120,13 @@ export const LLM_PROFILES = {
   // Accuracy-focused with best reasoners
   accurate: [
     LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.CLAUDE_SONNET,
     LLM_CONFIGS.GOOGLE_GEMINI_PRO
   ],
 
   // Two-model consensus for quick decisions
   quick_consensus: [
     LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.CLAUDE_SONNET
+    LLM_CONFIGS.GOOGLE_GEMINI_PRO
   ],
 
   // Single model (fallback)

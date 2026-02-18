@@ -279,6 +279,33 @@ class MultiLlmSystem {
       return false;
     }
   }
+
+  /**
+   * Generate images using DALL-E
+   * @param {Array} images - Array of image specs with { prompt, filename, size, quality, style }
+   * @param {string} outputDir - Directory to save images to
+   * @returns {Object} Result with generated image paths
+   */
+  async generateImages(images, outputDir) {
+    const { ImageGeneratorAgent } = await import("../agents/imageGeneratorAgent.js");
+    
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY not configured for image generation");
+    }
+
+    const generator = new ImageGeneratorAgent({
+      logger: this.logger
+    });
+
+    const traceId = `img-${Math.random().toString(16).slice(2)}-${Date.now()}`;
+    
+    return await generator.generateImages({
+      images,
+      outputDir,
+      traceId,
+      iteration: 0
+    });
+  }
 }
 
 /**
@@ -325,6 +352,14 @@ export async function consensusCall(config) {
 export async function callByProfile(config) {
   const multiLlm = getMultiLlm();
   return await multiLlm.callByProfile(config);
+}
+
+/**
+ * Generate images using DALL-E
+ */
+export async function generateImages(images, outputDir) {
+  const multiLlm = getMultiLlm();
+  return await multiLlm.generateImages(images, outputDir);
 }
 
 export default MultiLlmSystem;

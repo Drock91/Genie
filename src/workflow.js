@@ -1,5 +1,6 @@
 import { writePdf } from "./util/pdfWriter.js";
 import { CostOptimizationSystem } from "./util/costOptimization.js";
+import HtmlImageEmbedder from "./util/htmlImageEmbedder.js";
 import path from "path";
 import fs from "fs";
 
@@ -418,6 +419,44 @@ IMPORTANT: Focus on PRECISION and ACCURACY. Generate deliverables with exact nam
             
             if (executedFiles.length > 0) {
               console.log(`\n📁 Files created in: ${outputDir}\n`);
+            }
+
+            // Auto-generate images for HTML files with missing image references
+            try {
+              const htmlFiles = executedFiles.filter(f => f.path.endsWith('.html'));
+              if (htmlFiles.length > 0) {
+                const embedder = new HtmlImageEmbedder({ logger });
+                
+                for (const htmlFile of htmlFiles) {
+                  try {
+                    logger.info({ htmlFile: htmlFile.path }, "Checking for missing images in HTML");
+                    
+                    const imgDir = path.join(outputDir, 'img');
+                    
+                    // Detect missing images and generate them
+                    const result = await embedder.generateMissingImagesAndEmbed(
+                      htmlFile.path,
+                      imgDir,
+                      'img/'
+                    );
+                    
+                    if (result.success && result.generated > 0) {
+                      logger.info({ 
+                        htmlFile: htmlFile.path, 
+                        generated: result.generated,
+                        embedded: result.embedded
+                      }, "Images generated and embedded successfully");
+                      console.log(`✨ Generated ${result.generated} DALL-E images and embedded them`);
+                    } else if (!result.success && result.error) {
+                      logger.warn({ htmlFile: htmlFile.path, error: result.error }, "Image generation skipped");
+                    }
+                  } catch (imgErr) {
+                    logger.warn({ htmlFile: htmlFile.path, error: imgErr.message }, "Image generation failed");
+                  }
+                }
+              }
+            } catch (imgError) {
+              logger.warn({ error: imgError.message }, "Image generation phase failed but workflow continues");
             }
           } catch (writeError) {
             logger.error({ error: writeError.message }, "File writing failed");
