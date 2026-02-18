@@ -7,6 +7,7 @@ import path from "path";
  */
 export class PatchExecutor {
   constructor({ workspaceDir = "./output", projectName = null, logger }) {
+    this.projectName = projectName;
     // If projectName is provided, use output/<projectName> as workspaceDir
     if (projectName) {
       this.workspaceDir = path.join(workspaceDir, projectName);

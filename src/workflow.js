@@ -277,7 +277,8 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
         // NEW: Delivery Manager verification - check all deliverables match requirements
         let deliveryVerification = { ok: true, issues: [] };
         if (agents.delivery && executor) {
-          const outputPath = path.join(executor.workspaceDir, executor.projectName);
+          // Use executor.workspaceDir which already includes projectName if provided
+          const outputPath = executor.workspaceDir;
           deliveryVerification = await agents.delivery.verifyDelivery({
             userInput,
             outputPath,

@@ -8,7 +8,7 @@ export class BackendCoderAgent extends BaseAgent {
     super({ name: "BackendCoder", ...opts });
   }
 
-  async build({ plan, traceId, iteration }) {
+  async build({ plan, traceId, iteration, userInput }) {
     this.info({ traceId, iteration }, "Producing backend changes");
 
     const backendItems = plan.workItems.filter(w => w.owner === "backend");
@@ -29,9 +29,9 @@ export class BackendCoderAgent extends BaseAgent {
         try {
           this.info({ traceId, iteration, taskId: item.id }, "Generating image");
 
-          // Extract description and filename from task
-          const imagePrompt = this._extractImagePrompt(item.task);
-          let outputPath = this._extractOutputPath(item.task);
+          // Extract description and filename from task and userInput
+          const imagePrompt = this._extractImagePrompt(item.task, userInput);
+          let outputPath = this._extractOutputPath(item.task, userInput);
           // Remove any leading 'output/' or './output/' from path
           outputPath = outputPath.replace(/^\.?\/?output\//, "");
 
@@ -64,20 +64,51 @@ export class BackendCoderAgent extends BaseAgent {
     });
   }
 
-  _extractImagePrompt(task) {
-    // Try to extract image description from task
+  _extractImagePrompt(task, userInput = "") {
+    // First try to extract from userInput which has more context
+    if (userInput) {
+      const contextMatch = userInput.match(/(?:create|generate|make)\s+(?:a\s+)?(\w+)\s+(?:PNG|image|picture|photo)/i);
+      if (contextMatch && contextMatch[1]) {
+        const subject = contextMatch[1];
+        // Make it more descriptive for DALL-E
+        return `a detailed, high-quality image of ${subject}`;
+      }
+    }
+
+    // Fallback to extracting from task
     const match = task.match(/(?:image|picture|generate)\s+(?:of\s+)?(?:a\s+)?(.+?)(?:\s+(?:and|in|to|as|file)|$)/i);
     return match ? match[1].trim() : "a beautiful scene";
   }
 
-  _extractOutputPath(task) {
+  _extractOutputPath(task, userInput = "") {
     // Try to extract filename from task (e.g., "whale.png", "myImage.jpg")
     const filenameMatch = task.match(/([a-zA-Z0-9_-]+\.(?:png|jpg|jpeg|gif))/i);
     if (filenameMatch) {
       return filenameMatch[1];
     }
 
-    // Try to extract subject/theme from task to create meaningful filename
+    // Try to extract subject/theme from userInput first for more context
+    if (userInput) {
+      const subjectPatterns = [
+        /(?:create|generate|make)\s+(?:a\s+)?(\w+)\s+(?:PNG|image|picture|photo)/i,
+        /(\w+)\s+(?:PNG|image|picture|photo)/i,
+        /(\w+)\.(?:txt|json|md)/i  // Also extract from file references
+      ];
+
+      for (const pattern of subjectPatterns) {
+        const match = userInput.match(pattern);
+        if (match && match[1]) {
+          const subject = match[1].toLowerCase();
+          // Skip generic words
+          if (!['output', 'image', 'picture', 'photo', 'file', 'a', 'an', 'the'].includes(subject)) {
+            this.info({ subject, source: 'userInput' }, "Extracted filename from context");
+            return `${subject}.png`;
+          }
+        }
+      }
+    }
+
+    // Fallback: try to extract from task
     const subjectPatterns = [
       /(?:create|generate|make)\s+(?:a\s+)?(\w+)\s+(?:PNG|image|picture|photo)/i,
       /(\w+)\s+(?:PNG|image|picture|photo)/i,
@@ -96,7 +127,7 @@ export class BackendCoderAgent extends BaseAgent {
     }
 
     // Last resort: use "image.png" instead of "output.png"
-    this.warn({ task }, "Could not extract meaningful filename from task, using 'image.png'");
+    this.warn({ task, userInput }, "Could not extract meaningful filename, using 'image.png'");
     return "image.png";
   }
 
