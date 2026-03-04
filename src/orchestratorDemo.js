@@ -5,7 +5,7 @@
 
 import { EnhancedOrchestrator } from "./orchestrator.js";
 import { RequestAnalyzer } from "./experts/requestAnalyzer.js";
-import MultiLlmSystem from "./llm/multiLlmSystem.js";
+import MultiLlmSystem, { initializeMultiLlm } from "./llm/multiLlmSystem.js";
 import { logger } from "./util/logger.js";
 
 /**
@@ -249,6 +249,11 @@ export async function runAllDemos() {
   console.log("╚" + "=".repeat(58) + "╝");
 
   try {
+    // Initialize Multi-LLM system first
+    console.log("\n🔄 Initializing Multi-LLM system...\n");
+    await initializeMultiLlm(logger);
+    console.log("✅ Multi-LLM system ready\n");
+
     await demoProductBuild();
     await demoSimpleQuestion();
     await demoFeatureRequest();

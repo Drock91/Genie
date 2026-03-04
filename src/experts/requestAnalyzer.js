@@ -26,7 +26,7 @@ export class RequestAnalyzer {
           schema: {
             type: "object",
             additionalProperties: false,
-            required: ["request_type", "needs_legal_review", "needs_marketing_strategy", "reasoning"],
+            required: ["request_type", "needs_legal_review", "needs_marketing_strategy", "needs_technical_build", "reasoning", "priority_level"],
             properties: {
               request_type: {
                 type: "string",
@@ -45,10 +45,14 @@ export class RequestAnalyzer {
                 type: "boolean",
                 description: "Does this require building/coding?"
               },
-              reasoning: { type: "string" },
+              reasoning: { 
+                type: "string",
+                description: "Brief explanation of the categorization"
+              },
               priority_level: {
                 type: "string",
-                enum: ["low", "medium", "high", "critical"]
+                enum: ["low", "medium", "high", "critical"],
+                description: "Priority level of the request"
               }
             }
           }
@@ -56,7 +60,7 @@ export class RequestAnalyzer {
         temperature: 0.1 // Low for consistency
       });
 
-      const analysis = result.consensus;
+      const analysis = this._normalizeAnalysis(result.consensus);
 
       this.logger?.info({
         requestType: analysis.request_type,
@@ -77,6 +81,70 @@ export class RequestAnalyzer {
         priority_level: "medium"
       };
     }
+  }
+
+  /**
+   * Normalize analysis response to handle non-standard LLM outputs
+   * Some providers (like Gemini) don't strictly follow JSON schema enums
+   */
+  _normalizeAnalysis(analysis) {
+    if (!analysis) {
+      return {
+        request_type: "other",
+        needs_legal_review: false,
+        needs_marketing_strategy: false,
+        needs_technical_build: false,
+        reasoning: "No analysis provided",
+        priority_level: "medium"
+      };
+    }
+
+    // Valid request types
+    const validTypes = ["product_build", "company_formation", "feature_request", "question", "analysis", "other"];
+    const validPriorities = ["low", "medium", "high", "critical"];
+
+    // Normalize request_type - map common variations to valid enum values
+    let requestType = String(analysis.request_type || "other").toLowerCase();
+    
+    // Map common variations
+    const typeMapping = {
+      "feature implementation": "feature_request",
+      "feature": "feature_request",
+      "build": "product_build",
+      "product": "product_build",
+      "company": "company_formation",
+      "question": "question",
+      "analysis": "analysis"
+    };
+    
+    if (!validTypes.includes(requestType)) {
+      // Check for partial matches
+      for (const [pattern, mapped] of Object.entries(typeMapping)) {
+        if (requestType.includes(pattern)) {
+          requestType = mapped;
+          break;
+        }
+      }
+      // Default to "other" if still not valid
+      if (!validTypes.includes(requestType)) {
+        requestType = "other";
+      }
+    }
+
+    // Normalize priority
+    let priority = String(analysis.priority_level || "medium").toLowerCase();
+    if (!validPriorities.includes(priority)) {
+      priority = "medium";
+    }
+
+    return {
+      request_type: requestType,
+      needs_legal_review: Boolean(analysis.needs_legal_review),
+      needs_marketing_strategy: Boolean(analysis.needs_marketing_strategy),
+      needs_technical_build: Boolean(analysis.needs_technical_build),
+      reasoning: String(analysis.reasoning || ""),
+      priority_level: priority
+    };
   }
 
   /**
