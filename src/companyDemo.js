@@ -4,7 +4,7 @@
  */
 
 import { DepartmentManager } from "./experts/departmentManager.js";
-import { Logger } from "./util/logger.js";
+import { logger } from "./util/logger.js";
 
 /**
  * Showcase the full organization
@@ -16,7 +16,6 @@ export async function showcaseOrganization() {
   console.log("║" + "  18 Departments | Multi-LLM Consensus | Enterprise Ready".padEnd(63) + "║");
   console.log("╚" + "═".repeat(62) + "╝");
 
-  const logger = new Logger();
   const manager = new DepartmentManager({ logger });
 
   // Display organization chart
@@ -276,7 +275,13 @@ export async function runFullDemo() {
 }
 
 // Run if executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const isMainModule = path.resolve(process.argv[1]) === path.resolve(__filename);
+
+if (isMainModule) {
   runFullDemo().catch(console.error);
 }
 

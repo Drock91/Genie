@@ -1,6 +1,7 @@
 import { writePdf } from "./util/pdfWriter.js";
 import { CostOptimizationSystem } from "./util/costOptimization.js";
 import HtmlImageEmbedder from "./util/htmlImageEmbedder.js";
+import { extractProjectName, extractOutputFolder, isPdfRequested, isRefinementRequest } from "./util/inputParser.js";
 import path from "path";
 import fs from "fs";
 
@@ -11,6 +12,7 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
 
   const traceId = `${Math.random().toString(16).slice(2)}-${Date.now()}`;
   const maxIterations = config?.maxIterations ?? 5;
+  const researchOnly = Boolean(config?.researchOnly);
   const startTime = Date.now();
 
   // Store tracker globally for multiLlm system to access
@@ -27,37 +29,16 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
     logger.info({}, "🟢 Cost Optimization activated - 70-85% savings expected!");
   }
 
-  // Extract projectName for context (same logic as index.js)
-  function extractProjectName(userInput) {
-    const patterns = [
-      /(?:build|create|make)\s+(?:a\s+)?(?:app|project|system|platform|called\s+)?["`']?(\w+)["`']?/i,
-      /(?:product|company|service)\s+(?:called|named)\s+["`']?(\w+)["`']?/i,
-      /folder called\s+["`']?(\w+)["`']?/i,
-      /^\s*(\w+)\s*(?:app|project|system)/i
-    ];
-    for (const pattern of patterns) {
-      const match = userInput.match(pattern);
-      if (match && match[1]) {
-        return match[1].charAt(0).toUpperCase() + match[1].slice(1);
-      }
-    }
-    return "Project";
-  }
+  // Extract projectName and other metadata from user input
   const projectName = extractProjectName(userInput);
-  
-  // Check if user requested PDF output
-  const pdfRequested = /\bpdf\b/i.test(userInput);
-  const outputFolderMatch = userInput.match(/output\/?([\w\-\/]+)/i) ||
-    userInput.match(/output(?:\s+folder)?\s+(?:called|named)\s+["']?([\w\-\/]+)["']?/i);
-  const customFolder = outputFolderMatch ? outputFolderMatch[1]?.replace(/["']/g, '') : null;
-
-  // Check if this is a refinement request for existing code
-  const isRefinementRequest = /\b(refine|improve|fix|update|change|modify|enhance|adjust)\b/i.test(userInput);
+  const pdfRequested = isPdfRequested(userInput);
+  const customFolder = extractOutputFolder(userInput);
+  const isRefinement = isRefinementRequest(userInput);
   const projectPath = executor ? path.join(executor.workspaceDir) : null;
   const hasExistingFiles = projectPath && fs.existsSync(projectPath) && fs.readdirSync(projectPath).length > 0;
 
   // If refinement requested AND files exist, use CodeRefinerAgent
-  if (isRefinementRequest && hasExistingFiles && agents.codeRefiner) {
+  if (!researchOnly && isRefinement && hasExistingFiles && agents.codeRefiner) {
     logger.info({ traceId, projectPath, isRefinement: true }, "Detected refinement request for existing code");
     
     try {
@@ -67,11 +48,22 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
         filePaths: [] // Auto-detect all code files
       });
 
+      // Validate refinement result
+      if (!refinementResult) {
+        throw new Error("CodeRefiner returned empty result");
+      }
+
       // Execute the patches
+      let executedFiles = [];
       if (executor && refinementResult.patches && refinementResult.patches.length > 0) {
-        const execResult = await executor.execute(refinementResult.patches);
-        executedFiles = execResult.files || [];
-        logger.info({ traceId, filesUpdated: execResult.executed }, "Refinement patches applied");
+        try {
+          const execResult = await executor.execute(refinementResult.patches);
+          executedFiles = execResult.files || [];
+          logger.info({ traceId, filesUpdated: execResult.executed }, "Refinement patches applied successfully");
+        } catch (execError) {
+          logger.error({ traceId, error: execError.message }, "Failed to execute refinement patches");
+          throw new Error(`Patch execution failed: ${execError.message}`);
+        }
       }
 
       const duration = Date.now() - startTime;
@@ -108,7 +100,7 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
     }
   }
 
-  logger.info({ traceId, userInput, maxIterations }, "Workflow started");
+  logger.info({ traceId, userInput, maxIterations, researchOnly }, "Workflow started");
 
   let iteration = 0;
   let lastError = null;
@@ -119,7 +111,7 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
     logger.info({ traceId, iteration }, "Iteration start");
 
     try {
-      const plan = await agents.manager.plan({ userInput, iteration, traceId });
+      const plan = await agents.manager.plan({ userInput, iteration, traceId, researchOnly });
       if (config?.powerLevel) {
         const normalized = config.powerLevel === "med" ? "medium" : config.powerLevel;
         const power = ["low", "medium", "high"].includes(normalized) ? normalized : null;
@@ -128,6 +120,24 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
           logger.info({ traceId, iteration, powerLevel: power, consensusLevel: plan.consensusLevel }, "Power override applied");
         }
       }
+
+      if (researchOnly) {
+        const existingWriterItems = (plan.workItems || []).filter(w => w.owner === "writer");
+
+        plan.kind = "text";
+        plan.workItems = existingWriterItems.length > 0
+          ? existingWriterItems
+          : [{
+              id: `research-${iteration}`,
+              owner: "writer",
+              task: `Research and synthesize a detailed answer for: ${userInput}`
+            }];
+        plan.requiredAgents = { security: false, qa: false, legal: false };
+        if (!config?.powerLevel) {
+          plan.consensusLevel = "consensus";
+        }
+      }
+
       logger.info({ traceId, iteration, kind: plan.kind }, "Plan created");
 
       const outputs = [];
@@ -145,7 +155,7 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
       const agentPromises = [];
       
       if (hasWriterWork) {
-        agentPromises.push(agents.writer.build({ plan, traceId, iteration, context: agentContext, userInput }));
+        agentPromises.push(agents.writer.build({ plan, traceId, iteration, context: agentContext, userInput, researchOnly }));
       }
       if (hasBackendWork) {
         agentPromises.push(agents.backend.build({ plan, traceId, iteration, context: agentContext, userInput }));
@@ -156,8 +166,8 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
 
       // If no specific work items, fall back to plan.kind
       if (agentPromises.length === 0) {
-        if (plan.kind === "text") {
-          agentPromises.push(agents.writer.build({ plan, traceId, iteration, context: agentContext, userInput }));
+        if (plan.kind === "text" || researchOnly) {
+          agentPromises.push(agents.writer.build({ plan, traceId, iteration, context: agentContext, userInput, researchOnly }));
         } else {
           agentPromises.push(
             agents.backend.build({ plan, traceId, iteration, context: agentContext, userInput }),
@@ -184,7 +194,7 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
       }
 
       // Execute patches if executor provided
-      if (executor && merged.patches && merged.patches.length > 0) {
+      if (!researchOnly && executor && merged.patches && merged.patches.length > 0) {
         const execResult = await executor.execute(merged.patches);
         executedFiles.push(...(execResult.files || []));
         logger.info({ traceId, iteration, executed: execResult.executed }, "Patches executed");
@@ -204,49 +214,47 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
         }
       }, "Running required review agents only");
 
-      // Always run tests for code
-      reviewPromises.push(
-        agents.tests.run({ traceId, iteration }).then(result => ({ type: 'tests', result }))
-      );
-
-      // QA only if required
-      if (requiredAgents.qa) {
+      if (!researchOnly) {
         reviewPromises.push(
-          agents.qa.review({
-            userInput,
-            traceId,
-            iteration,
-            patches: merged.patches,
-            consensusLevel: plan.consensusLevel || "single"
-          })
-            .then(result => ({ type: 'qa', result }))
+          agents.tests.run({ traceId, iteration }).then(result => ({ type: 'tests', result }))
         );
-      }
 
-      // Security only if required
-      if (requiredAgents.security) {
-        reviewPromises.push(
-          agents.security.review({
-            userInput,
-            traceId,
-            iteration,
-            consensusLevel: plan.consensusLevel || "single"
-          })
-            .then(result => ({ type: 'security', result }))
-        );
-      }
+        if (requiredAgents.qa) {
+          reviewPromises.push(
+            agents.qa.review({
+              userInput,
+              traceId,
+              iteration,
+              patches: merged.patches,
+              consensusLevel: plan.consensusLevel || "single"
+            })
+              .then(result => ({ type: 'qa', result }))
+          );
+        }
 
-      // Legal only if required (and agent exists)
-      if (requiredAgents.legal && agents.legal) {
-        reviewPromises.push(
-          agents.legal.review({
-            userInput,
-            traceId,
-            iteration,
-            consensusLevel: plan.consensusLevel || "single"
-          })
-            .then(result => ({ type: 'legal', result }))
-        );
+        if (requiredAgents.security) {
+          reviewPromises.push(
+            agents.security.review({
+              userInput,
+              traceId,
+              iteration,
+              consensusLevel: plan.consensusLevel || "single"
+            })
+              .then(result => ({ type: 'security', result }))
+          );
+        }
+
+        if (requiredAgents.legal && agents.legal) {
+          reviewPromises.push(
+            agents.legal.review({
+              userInput,
+              traceId,
+              iteration,
+              consensusLevel: plan.consensusLevel || "single"
+            })
+              .then(result => ({ type: 'legal', result }))
+          );
+        }
       }
 
       const reviewResults = await Promise.all(reviewPromises);
@@ -301,7 +309,7 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
 
         // NEW: Delivery Manager verification - check all deliverables match requirements
         let deliveryVerification = { ok: true, issues: [] };
-        if (agents.delivery && executor) {
+        if (!researchOnly && agents.delivery && executor) {
           // Use executor.workspaceDir which already includes projectName if provided
           const outputPath = executor.workspaceDir;
           deliveryVerification = await agents.delivery.verifyDelivery({
@@ -423,19 +431,21 @@ IMPORTANT: Focus on PRECISION and ACCURACY. Generate deliverables with exact nam
 
             // Auto-generate images for HTML files with missing image references
             try {
-              const htmlFiles = executedFiles.filter(f => f.path.endsWith('.html'));
+              const htmlFiles = executedFiles.filter(f => (f.path || "").endsWith('.html'));
               if (htmlFiles.length > 0) {
                 const embedder = new HtmlImageEmbedder({ logger });
                 
                 for (const htmlFile of htmlFiles) {
                   try {
-                    logger.info({ htmlFile: htmlFile.path }, "Checking for missing images in HTML");
+                    const htmlFilePath = htmlFile.fullPath || htmlFile.path;
+                    const htmlDir = path.dirname(htmlFilePath);
+                    logger.info({ htmlFile: htmlFilePath }, "Checking for missing images in HTML");
                     
-                    const imgDir = path.join(outputDir, 'img');
+                    const imgDir = path.join(htmlDir, 'img');
                     
                     // Detect missing images and generate them
                     const result = await embedder.generateMissingImagesAndEmbed(
-                      htmlFile.path,
+                      htmlFilePath,
                       imgDir,
                       'img/'
                     );

@@ -21,9 +21,8 @@ export class FrontendCoderAgent extends BaseAgent {
     } else {
       notes.push(`Frontend work items: ${frontendItems.map(w => w.id).join(", ")}`);
 
-      // Frontend files always go in the root of the project output folder
-      // The executor already sets workspaceDir to output/ProjectName
-      const projectSubfolder = "";
+      // Frontend files go in the frontend/ folder
+      const projectSubfolder = "frontend/";
 
       // Generate application-specific code using LLM based on requirements
       try {
@@ -33,6 +32,10 @@ export class FrontendCoderAgent extends BaseAgent {
           projectName: context.projectName,
           consensusLevel: context.consensusLevel
         });
+
+        if (generatedCode && generatedCode.html) {
+          generatedCode.html = generatedCode.html.replace(/script\.js/gi, "app.js");
+        }
 
         if (generatedCode && generatedCode.html) {
           patches.push({
@@ -50,8 +53,8 @@ export class FrontendCoderAgent extends BaseAgent {
 
         if (generatedCode && generatedCode.js) {
           patches.push({
-            diff: `*** Add File: ${projectSubfolder}script.js\n${generatedCode.js}`,
-            file: `${projectSubfolder}script.js`
+            diff: `*** Add File: ${projectSubfolder}app.js\n${generatedCode.js}`,
+            file: `${projectSubfolder}app.js`
           });
         }
 
@@ -81,12 +84,16 @@ export class FrontendCoderAgent extends BaseAgent {
         profile: "balanced",
         consensusLevel,
         system: `You are an expert frontend developer. Generate complete, working HTML5/CSS3/JavaScript code.
-CRITICAL: Return ONLY valid JSON with these exact keys: {"html": "...", "css": "...", "js": "..."}
-Do NOT include markdown, code fences, or any text outside the JSON object.`,
+      Use app.js as the JavaScript filename and reference it from the HTML.
+      Implement real, working functionality for catalog, cart, subscriptions, and admin dashboard interactions.
+      Include a product data model in app.js and wire UI events for add/remove, filters, and totals.
+      Reference product images under img/ using: img/coffee-1.jpg ... img/coffee-6.jpg.
+      CRITICAL: Return ONLY valid JSON with these exact keys: {"html": "...", "css": "...", "js": "..."}
+      Do NOT include markdown, code fences, or any text outside the JSON object.`,
         user: `Generate code for: ${userInput}
 
 Work items:
-${workItems.map(w => `- ${w.title}`).join('\n')}
+${workItems.map(w => `- ${w.task || w.title || w.id}`).join('\n')}
 
 Return as JSON object with html, css, js properties. Code must be complete and runnable.`,
         temperature: 0.3

@@ -79,10 +79,15 @@ Keep the user's core intent but make it crystal clear and complete.`,
 
       const refined = result.consensus;
 
+      // Safety check for undefined response
+      if (!refined || !refined.refined_request) {
+        throw new Error("Invalid response from LLM - missing refined_request");
+      }
+
       this.info({
         originalLength: rawInput.length,
         refinedLength: refined.refined_request.length,
-        clarifications: refined.clarifications.length,
+        clarifications: (refined.clarifications || []).length,
         confidence: refined.confidence_score,
         models: result.metadata.totalSuccessful
       }, "Request refined successfully");
@@ -90,10 +95,10 @@ Keep the user's core intent but make it crystal clear and complete.`,
       return {
         original: rawInput,
         refined: refined.refined_request,
-        clarifications: refined.clarifications,
-        assumptions: refined.assumptions,
+        clarifications: refined.clarifications || [],
+        assumptions: refined.assumptions || [],
         missingInfo: refined.missing_info || [],
-        confidence: refined.confidence_score,
+        confidence: refined.confidence_score || 50,
         suggestedDepartments: refined.suggested_departments || [],
         metadata: {
           modelsUsed: result.metadata.totalSuccessful,

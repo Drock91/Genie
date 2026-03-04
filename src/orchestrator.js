@@ -3,10 +3,10 @@
  * Coordinates request analysis, specialist agent routing, and compliance reporting
  */
 
-import { RequestAnalyzer }from "../experts/requestAnalyzer.js";
-import { LegalSpecialistAgent } from "../agents/legalSpecialistAgent.js";
-import { MarketingStrategistAgent } from "../agents/marketingStrategistAgent.js";
-import { ReportGenerator } from "./reportGenerator.js";
+import { RequestAnalyzer } from "./experts/requestAnalyzer.js";
+import { LegalSpecialistAgent } from "./agents/legalSpecialistAgent.js";
+import { MarketingStrategistAgent } from "./agents/marketingStrategistAgent.js";
+import { ReportGenerator } from "./repo/reportGenerator.js";
 
 export class EnhancedOrchestrator {
   constructor({ logger, config = {}, multiLlmSystem = null } = {}) {

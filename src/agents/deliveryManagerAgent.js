@@ -27,10 +27,17 @@ export class DeliveryManagerAgent extends BaseAgent {
       // Step 1: Parse requirements to understand what should be delivered
       const requirements = await this.parseRequirements(userInput);
       
+      // Ensure requirements has expected structure
+      const safeRequirements = {
+        expected_files: requirements?.expected_files || [],
+        expected_folders: requirements?.expected_folders || [],
+        key_features: requirements?.key_features || []
+      };
+      
       this.info({ 
         traceId,
-        expectedFiles: requirements.expected_files.length,
-        expectedFolders: requirements.expected_folders.length
+        expectedFiles: safeRequirements.expected_files.length,
+        expectedFolders: safeRequirements.expected_folders.length
       }, "Requirements parsed");
 
       // Step 2: Scan actual output directory
@@ -43,7 +50,7 @@ export class DeliveryManagerAgent extends BaseAgent {
       }, "Output scanned");
 
       // Step 3: Verify completeness
-      const completeness = this.checkCompleteness(requirements, actualDeliverables);
+      const completeness = this.checkCompleteness(safeRequirements, actualDeliverables);
       
       if (completeness.missing.length > 0) {
         issues.push(
@@ -74,13 +81,13 @@ export class DeliveryManagerAgent extends BaseAgent {
       }
 
       // Step 5: Verify naming conventions
-      const namingIssues = this.checkNaming(requirements, actualDeliverables, userInput);
+      const namingIssues = this.checkNaming(safeRequirements, actualDeliverables, userInput);
       if (namingIssues.length > 0) {
         namingIssues.forEach(issue => issues.push(issue));
       }
 
       // Step 6: Verify folder structure
-      const structureIssues = this.checkStructure(requirements, actualDeliverables, userInput);
+      const structureIssues = this.checkStructure(safeRequirements, actualDeliverables, userInput);
       if (structureIssues.length > 0) {
         structureIssues.forEach(issue => issues.push(issue));
       }
@@ -89,6 +96,18 @@ export class DeliveryManagerAgent extends BaseAgent {
       const functionalIssues = await this.testDeliverables(actualDeliverables, outputPath);
       if (functionalIssues.length > 0) {
         functionalIssues.forEach(issue => issues.push(issue));
+      }
+
+      // Step 8: Validate documentation quality (no placeholders, not empty)
+      const docIssues = this.checkDocumentationQuality(actualDeliverables);
+      if (docIssues.length > 0) {
+        docIssues.forEach(issue => issues.push(issue));
+      }
+
+      // Step 9: Enforce enterprise docs for full web-app deliveries
+      const enterpriseDocIssues = this.checkEnterpriseDocs(actualDeliverables);
+      if (enterpriseDocIssues.length > 0) {
+        enterpriseDocIssues.forEach(issue => issues.push(issue));
       }
 
       const ok = issues.length === 0;
@@ -105,7 +124,7 @@ export class DeliveryManagerAgent extends BaseAgent {
       if (!ok) {
         fixInstructions = await this.generateFixInstructionsWithConsensus({
           issues,
-          requirements,
+          requirements: safeRequirements,
           actualDeliverables,
           userInput,
           traceId
@@ -125,7 +144,7 @@ export class DeliveryManagerAgent extends BaseAgent {
         output: makeAgentOutput({
           summary: ok ? "Delivery verification PASS" : "Delivery verification FAIL",
           notes: [
-            `Expected: ${requirements.expected_files.length} files, ${requirements.expected_folders.length} folders`,
+            `Expected: ${safeRequirements.expected_files.length} files, ${safeRequirements.expected_folders.length} folders`,
             `Actual: ${actualDeliverables.files.length} files, ${actualDeliverables.folders.length} folders`,
             `Missing: ${completeness.missing.length}`,
             `Duplicates: ${duplicates.length}`,
@@ -499,6 +518,116 @@ Extract specific names if mentioned (e.g., "whale.png" not "image.png").`,
         );
       }
     }
+
+    return issues;
+  }
+
+  /**
+   * Ensure documentation is present and not placeholder content
+   */
+  checkDocumentationQuality(actualDeliverables) {
+    const issues = [];
+    const docFiles = actualDeliverables.files.filter(f => ['.md', '.txt'].includes(f.extension));
+    const placeholderPattern = /(todo|tbd|add later|coming soon|lorem ipsum|fixme)/i;
+
+    for (const docFile of docFiles) {
+      try {
+        const content = fs.readFileSync(docFile.fullPath, 'utf8').trim();
+
+        if (!content || content.length < 200) {
+          issues.push(
+            makeIssue({
+              id: "delivery-020",
+              title: "Documentation too short or empty",
+              severity: Severity.CRITICAL,
+              description: `${docFile.name} is too short or empty to be useful`,
+              recommendation: ["Provide complete documentation content, no placeholders"],
+              area: "documentation"
+            })
+          );
+        }
+
+        if (placeholderPattern.test(content)) {
+          issues.push(
+            makeIssue({
+              id: "delivery-021",
+              title: "Placeholder text detected in documentation",
+              severity: Severity.CRITICAL,
+              description: `${docFile.name} contains placeholder text (TODO/TBD/add later)` ,
+              recommendation: ["Replace placeholders with final content"],
+              area: "documentation"
+            })
+          );
+        }
+      } catch (err) {
+        this.warn({ file: docFile.name, error: err.message }, "Failed to read documentation file");
+      }
+    }
+
+    return issues;
+  }
+
+  /**
+   * Enforce enterprise documentation presence and key sections
+   */
+  checkEnterpriseDocs(actualDeliverables) {
+    const issues = [];
+    const folderPaths = actualDeliverables.folders.map(f => f.path.toLowerCase());
+    const hasFrontend = folderPaths.some(p => p.endsWith("frontend") || p.includes("frontend/"));
+    const hasBackend = folderPaths.some(p => p.endsWith("backend") || p.includes("backend/"));
+
+    if (!hasFrontend || !hasBackend) {
+      return issues;
+    }
+
+    const requiredDocs = [
+      "docs/ui_checklist.md",
+      "docs/style_guide.md",
+      "docs/enterprise_checklist.md"
+    ];
+
+    const filePaths = actualDeliverables.files.map(f => f.path.toLowerCase());
+    requiredDocs.forEach(docPath => {
+      if (!filePaths.includes(docPath)) {
+        issues.push(
+          makeIssue({
+            id: "delivery-030",
+            title: "Missing enterprise documentation",
+            severity: Severity.CRITICAL,
+            description: `Required doc not found: ${docPath}`,
+            recommendation: ["Generate the missing enterprise documentation"],
+            area: "documentation"
+          })
+        );
+      }
+    });
+
+    const checkDocKeywords = (docName, requiredKeywords) => {
+      const docFile = actualDeliverables.files.find(f => f.name.toLowerCase() === docName);
+      if (!docFile) return;
+      try {
+        const content = fs.readFileSync(docFile.fullPath, 'utf8').toLowerCase();
+        const missing = requiredKeywords.filter(k => !content.includes(k));
+        if (missing.length > 0) {
+          issues.push(
+            makeIssue({
+              id: "delivery-031",
+              title: "Enterprise doc missing key sections",
+              severity: Severity.HIGH,
+              description: `${docFile.name} is missing sections: ${missing.join(', ')}`,
+              recommendation: ["Add the missing sections with full detail"],
+              area: "documentation"
+            })
+          );
+        }
+      } catch (err) {
+        this.warn({ file: docFile.name, error: err.message }, "Failed to read enterprise doc file");
+      }
+    };
+
+    checkDocKeywords("ui_checklist.md", ["accessibility", "responsive", "animations", "qa"]);
+    checkDocKeywords("style_guide.md", ["typography", "color", "spacing", "components", "motion"]);
+    checkDocKeywords("enterprise_checklist.md", ["security", "observability", "ci/cd", "backups", "sla"]);
 
     return issues;
   }

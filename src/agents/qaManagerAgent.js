@@ -47,6 +47,27 @@ export class QAManagerAgent extends BaseAgent {
       }
     }
 
+    // NEW: If frontend work items exist, validate that UI checklist and style guide are honored
+    if (patches && patches.length > 0) {
+      try {
+        const uiValidation = await this.validateUiAgainstChecklist(patches);
+        if (uiValidation && !uiValidation.checklist_honored) {
+          issues.push(
+            makeIssue({
+              id: "qa-600",
+              title: "UI does not meet checklist standards",
+              severity: Severity.CRITICAL,
+              description: `UI implementation missing key items: ${uiValidation.missing_items.join(', ')}`,
+              recommendation: ["Implement all UI checklist items: accessibility, animations, responsiveness, visual design"],
+              area: "ui-quality"
+            })
+          );
+        }
+      } catch (err) {
+        this.warn({ error: err.message }, "UI checklist validation failed, skipping");
+      }
+    }
+
     // Get QA assessment from multi-LLM consensus
     try {
       const qaResult = await this.assessQuality(userInput, consensusLevel);
@@ -256,6 +277,70 @@ Return your validation as JSON.`,
       return result.consensus;
     } catch (err) {
       this.error({ error: err.message }, "Code validation failed");
+      throw err;
+    }
+  }
+
+  /**
+   * Validate that UI code meets all checklist requirements
+   */
+  async validateUiAgainstChecklist(patches = [], consensusLevel = "single") {
+    this.info({ patchCount: patches.length }, "Validating UI against checklist requirements");
+
+    try {
+      const htmlPatches = patches.filter(p => (p.file || "").endsWith(".html"));
+      const cssPatches = patches.filter(p => (p.file || "").endsWith(".css"));
+      if (htmlPatches.length === 0 && cssPatches.length === 0) {
+        return { checklist_honored: true, missing_items: [] };
+      }
+
+      const htmlContent = htmlPatches.map(p => p.diff || "").join("\n");
+      const cssContent = cssPatches.map(p => p.diff || "").join("\n");
+
+      const result = await consensusCall({
+        profile: "balanced",
+        consensusLevel,
+        system: `You are an expert UI reviewer validating that frontend code meets a comprehensive UI checklist. Checklist items:
+- Accessibility: semantic HTML, alt text, visible focus states, ARIA labels
+- Responsiveness: works from 320px to 1440px, mobile layout, touch targets
+- Animations: page load reveal, interactive feedback, prefers-reduced-motion
+- Visual design: typography scale, accessible color contrast, consistent spacing
+- Layout: clear hierarchy, responsive grid, no overflow issues
+- QA: no placeholder text, no TODOs, content is final
+
+Be STRICT: If any key item is missing or placeholder, mark checklist_honored = false.`,
+        user: `HTML:\n${htmlContent.substring(0, 3000)}\n\nCSS:\n${cssContent.substring(0, 3000)}\n\nValidate against the UI checklist above.`,
+        schema: {
+          name: "ui_validation",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["checklist_honored", "missing_items"],
+            properties: {
+              checklist_honored: {
+                type: "boolean",
+                description: "Does the UI meet all checklist standards?"
+              },
+              missing_items: {
+                type: "array",
+                items: { type: "string" },
+                description: "List of checklist items that are missing or incomplete"
+              }
+            }
+          }
+        },
+        temperature: 0.05
+      });
+
+      this.info({
+        checklist_honored: result.consensus.checklist_honored,
+        missing_items_count: result.consensus.missing_items.length,
+        providers: result.metadata.totalSuccessful
+      }, "UI checklist validation complete");
+
+      return result.consensus;
+    } catch (err) {
+      this.error({ error: err.message }, "UI checklist validation failed");
       throw err;
     }
   }

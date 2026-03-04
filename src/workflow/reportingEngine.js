@@ -1,0 +1,252 @@
+/**
+ * Workflow Reporting Engine
+ * Handles result reporting, PDF export, and metrics output
+ */
+
+import { writePdf } from "../util/pdfWriter.js";
+import HtmlImageEmbedder from "../util/htmlImageEmbedder.js";
+import path from "path";
+import fs from "fs";
+
+/**
+ * Build result summary for reporting
+ * @param {Object} options - Summary options
+ * @param {string} options.traceId - Request trace ID
+ * @param {number} options.duration - Total duration in ms
+ * @param {Array} options.executedFiles - Files generated/modified
+ * @param {Array} options.iterationResults - Results from each iteration
+ * @param {Object} options.metrics - Performance metrics
+ * @param {boolean} options.success - Success status
+ * @param {string} options.error - Error message if failed
+ * @returns {Object} Summary object
+ */
+export function buildResultSummary({
+  traceId,
+  duration,
+  executedFiles,
+  iterationResults,
+  metrics,
+  success,
+  error
+}) {
+  const filesByType = categorizeFiles(executedFiles);
+
+  return {
+    traceId,
+    timestamp: new Date().toISOString(),
+    success,
+    error,
+    duration,
+    durationFormatted: formatDuration(duration),
+    executedFiles: {
+      total: executedFiles.length,
+      byType: filesByType,
+      details: executedFiles
+    },
+    iterations: {
+      total: iterationResults?.length || 0,
+      successful: iterationResults?.filter(r => r.success).length || 0,
+      failed: iterationResults?.filter(r => !r.success).length || 0,
+      results: iterationResults
+    },
+    metrics: metrics ? {
+      agents: metrics.getAgentStats?.(),
+      llm: metrics.getLLMStats?.(),
+      files: metrics.getFileStats?.(),
+      total: metrics.getTotalTime?.()
+    } : null
+  };
+}
+
+/**
+ * Categorize files by type
+ * @param {Array} files - File paths
+ * @returns {Object} Files categorized by extension
+ */
+function categorizeFiles(files) {
+  const categories = {};
+
+  for (const file of files) {
+    const ext = path.extname(file) || 'no-extension';
+    if (!categories[ext]) {
+      categories[ext] = [];
+    }
+    categories[ext].push(file);
+  }
+
+  return categories;
+}
+
+/**
+ * Format duration to human-readable format
+ * @param {number} ms - Duration in milliseconds
+ * @returns {string} Formatted duration
+ */
+function formatDuration(ms) {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(2)}s`;
+  return `${(ms / 60000).toFixed(2)}m`;
+}
+
+/**
+ * Generate HTML report
+ * @param {Object} summary - Result summary
+ * @returns {string} HTML string
+ */
+export function generateHTMLReport(summary) {
+  const filesList = (summary.executedFiles.details || [])
+    .map(f => `<li><code>${f}</code></li>`)
+    .join('\n');
+
+  const agentStats = summary.metrics?.agents || {};
+  const agentRows = Object.entries(agentStats)
+    .map(([agent, stats]) => `
+      <tr>
+        <td>${agent}</td>
+        <td>${stats.callCount}</td>
+        <td>${stats.totalTime}ms</td>
+        <td>${stats.averageTime.toFixed(2)}ms</td>
+      </tr>
+    `)
+    .join('\n');
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>GENIE Workflow Report - ${summary.traceId}</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        .success { color: green; }
+        .error { color: red; }
+        table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        code { background-color: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
+        .metric { display: inline-block; margin: 10px; padding: 10px; background: #f9f9f9; border-radius: 5px; }
+      </style>
+    </head>
+    <body>
+      <h1>GENIE Workflow Report</h1>
+      <p>Generated: ${summary.timestamp}</p>
+      <p>Trace ID: <code>${summary.traceId}</code></p>
+      
+      <h2 class="${summary.success ? 'success' : 'error'}">
+        ${summary.success ? '✅ SUCCESS' : '❌ FAILED'}
+      </h2>
+      
+      ${summary.error ? `<p class="error"><strong>Error:</strong> ${summary.error}</p>` : ''}
+      
+      <div class="metrics">
+        <div class="metric"><strong>Duration:</strong> ${summary.durationFormatted}</div>
+        <div class="metric"><strong>Files Generated:</strong> ${summary.executedFiles.total}</div>
+        <div class="metric"><strong>Iterations:</strong> ${summary.iterations.successful}/${summary.iterations.total}</div>
+      </div>
+      
+      <h3>Generated Files (${summary.executedFiles.total})</h3>
+      <ul>
+        ${filesList || '<li>No files generated</li>'}
+      </ul>
+      
+      ${agentRows ? `
+        <h3>Agent Performance</h3>
+        <table>
+          <tr>
+            <th>Agent</th>
+            <th>Calls</th>
+            <th>Total Time</th>
+            <th>Average Time</th>
+          </tr>
+          ${agentRows}
+        </table>
+      ` : ''}
+      
+      <footer>
+        <p><small>Generated by GENIE AI Company Builder</small></p>
+      </footer>
+    </body>
+    </html>
+  `;
+}
+
+/**
+ * Export results to PDF if requested
+ * @param {Object} options - Export options
+ * @param {Object} options.summary - Result summary
+ * @param {string} options.outputPath - Where to save PDF
+ * @param {Object} options.logger - Logger instance
+ * @returns {Promise<boolean>} True if successful
+ */
+export async function exportResultsToPDF({ summary, outputPath, logger }) {
+  try {
+    const html = generateHTMLReport(summary);
+    
+    // Embed images if needed
+    const embedder = new HtmlImageEmbedder();
+    const embeddedHtml = await embedder.embedImages(html);
+    
+    // Generate PDF
+    await writePdf(embeddedHtml, outputPath);
+    
+    logger?.info({ path: outputPath }, "✅ PDF report saved");
+    return true;
+
+  } catch (err) {
+    logger?.error({ error: err.message }, "Failed to generate PDF");
+    return false;
+  }
+}
+
+/**
+ * Save results to JSON file
+ * @param {Object} options - Save options
+ * @param {Object} options.summary - Result summary
+ * @param {string} options.outputPath - Where to save JSON
+ * @param {Object} options.logger - Logger instance
+ * @returns {boolean} True if successful
+ */
+export function saveResultsToJSON({ summary, outputPath, logger }) {
+  try {
+    const dir = path.dirname(outputPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    fs.writeFileSync(outputPath, JSON.stringify(summary, null, 2));
+    logger?.info({ path: outputPath }, "✅ Results saved to JSON");
+    return true;
+
+  } catch (err) {
+    logger?.error({ error: err.message }, "Failed to save results");
+    return false;
+  }
+}
+
+/**
+ * Print results to console
+ * @param {Object} summary - Result summary
+ * @param {Object} logger - Logger instance
+ */
+export function printResultsSummary(summary, logger) {
+  logger?.info({}, "\n" + "=".repeat(60));
+  logger?.info({}, `REQUEST: ${summary.traceId}`);
+  logger?.info({}, "=".repeat(60));
+  logger?.info({}, `Status: ${summary.success ? '✅ SUCCESS' : '❌ FAILED'}`);
+  logger?.info({}, `Duration: ${summary.durationFormatted}`);
+  logger?.info({}, `Files Generated: ${summary.executedFiles.total}`);
+  logger?.info({}, `Iterations: ${summary.iterations.successful}/${summary.iterations.total}`);
+  
+  if (summary.executedFiles.total > 0) {
+    logger?.info({}, "\nGenerated Files:");
+    summary.executedFiles.details.forEach(file => {
+      logger?.info({}, `  • ${file}`);
+    });
+  }
+
+  if (!summary.success && summary.error) {
+    logger?.error({}, `Error: ${summary.error}`);
+  }
+
+  logger?.info({}, "=".repeat(60) + "\n");
+}

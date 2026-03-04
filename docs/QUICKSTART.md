@@ -301,7 +301,7 @@ npm test
 
 ## 13. Next Steps
 
-1. **Explore:** Run `npm run demo` to see all 20 agents
+1. **Explore:** Run `npm run demo` to see all 35 agents
 2. **Build:** Try `npm start -- "your idea here"`
 3. **Generate:** Use `npm run generate-project` for runnable code
 4. **Learn More:** Check [CAPABILITIES.md](./CAPABILITIES.md) for full reference
@@ -353,5 +353,5 @@ GENIE will give you a complete business plan, technical architecture, marketing 
 
 **Version:** 1.0.0  
 **Status:** Production Ready ✅  
-**Agents:** 20+  
+**Agents:** 35  
 **LLM Providers:** 3 (OpenAI, Anthropic, Google)

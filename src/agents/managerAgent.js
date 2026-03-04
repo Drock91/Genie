@@ -3,6 +3,7 @@ import { makeAgentOutput } from "../models.js";
 import { llmJson } from "../llm/openaiClient.js";
 import { consensusCall } from "../llm/multiLlmSystem.js";
 import { ManagerPlanSchema } from "../llm/schemas.js";
+import { PROJECT_TEMPLATES, getProjectRequirements, getFileChecklist } from "../experts/projectTemplates.js";
 
 export class ManagerAgent extends BaseAgent {
   constructor(opts) {
@@ -11,7 +12,7 @@ export class ManagerAgent extends BaseAgent {
     this.expenseTracker = opts.expenseTracker || null;
   }
 
-    async plan({ userInput, iteration, traceId }) {
+    async plan({ userInput, iteration, traceId, researchOnly = false }) {
     this.info({ traceId, iteration }, "Planning work items with multi-LLM consensus");
 
     const system = [
@@ -43,7 +44,10 @@ export class ManagerAgent extends BaseAgent {
     const user = [
       `User request: ${userInput}`,
       "Decide kind=text for writing tasks, kind=code for software tasks.",
-      "Determine which review agents are needed based on the request complexity and domain."
+      "Determine which review agents are needed based on the request complexity and domain.",
+      researchOnly
+        ? "Research-only mode is ON: enforce kind='text', owner='writer', and do not include code generation work items."
+        : ""
     ].join("\n");
 
     // Use multi-LLM consensus for important planning decision
@@ -52,6 +56,7 @@ export class ManagerAgent extends BaseAgent {
       system,
       user,
       schema: ManagerPlanSchema,
+      consensusLevel: researchOnly ? "consensus" : "single",
       temperature: 0.1
     });
 
@@ -67,6 +72,24 @@ export class ManagerAgent extends BaseAgent {
     if (!Array.isArray(planJson.workItems)) {
       planJson.workItems = [];
     }
+
+    // Normalize work items to ensure task/file fields exist
+    planJson.workItems = planJson.workItems.map(item => {
+      const normalized = { ...item };
+
+      if (!normalized.task) {
+        normalized.task = normalized.description || normalized.title || normalized.name || "";
+      }
+
+      if (!normalized.file && normalized.outputPath) {
+        const filePath = this.normalizeOutputPath(normalized.outputPath);
+        if (filePath) {
+          normalized.file = filePath;
+        }
+      }
+
+      return normalized;
+    });
 
     // Handle media requests (images, videos)
     if (isMediaRequest) {
@@ -85,9 +108,9 @@ export class ManagerAgent extends BaseAgent {
       const hasWriterWork = planJson.workItems.some(w => w.owner === 'writer');
       if (!hasWriterWork) {
         // Extract what kind of text file from userInput
-        const textFileMatch = userInput.match(/([\w-]+\.txt)/i);
+        const textFileMatch = userInput && typeof userInput === 'string' ? userInput.match(/([\w-]+\.txt)/i) : null;
         const fileName = textFileMatch ? textFileMatch[1] : 'content.txt';
-        const contentMatch = userInput.match(/with ([\w\s]+) facts?/i) || userInput.match(/about ([\w\s]+)/i);
+        const contentMatch = userInput && typeof userInput === 'string' ? (userInput.match(/with ([\w\s]+) facts?/i) || userInput.match(/about ([\w\s]+)/i)) : null;
         const subject = contentMatch ? contentMatch[1] : 'the topic';
         
         planJson.workItems.push({
@@ -119,7 +142,7 @@ export class ManagerAgent extends BaseAgent {
         // No frontend work item yet, add one
         if (isMultiPage) {
           // Extract number of pages
-          const pageMatch = userInput.match(/\b([0-9]+)[-\s]?page\b/i);
+          const pageMatch = userInput && typeof userInput === 'string' ? userInput.match(/\b([0-9]+)[-\s]?page\b/i) : null;
           const pageCount = pageMatch ? parseInt(pageMatch[1]) : 5;
           
           planJson.workItems.push({
@@ -138,7 +161,102 @@ export class ManagerAgent extends BaseAgent {
       }
     }
 
-    // Set default required agents if not provided by LLM
+    // ========== PROJECT TEMPLATE CHECKING ==========
+    // ENSURE PLANNER HAS ALL REQUIRED FILES FOR PROJECT TYPE
+    
+    // 1. Detect project type from user input
+    const detectedProjectType = this.detectProjectType(userInput);
+    this.info({ detectedProjectType }, "Detected project type from request");
+    
+    if (detectedProjectType) {
+      const requirements = getProjectRequirements(detectedProjectType);
+      if (requirements) {
+        // 2. Get all required files for this project type
+        const requiredFiles = [];
+        Object.keys(requirements.requiredFiles).forEach(category => {
+          requirements.requiredFiles[category].forEach(file => {
+            if (file.required) {
+              requiredFiles.push({
+                category,
+                name: file.name,
+                description: file.description
+              });
+            }
+          });
+        });
+
+        // 3. Check which files are already in work items
+        const filesInPlan = new Set();
+        planJson.workItems.forEach(item => {
+          if (item.file) {
+            const normalized = item.file.toLowerCase();
+            filesInPlan.add(normalized);
+            const baseName = normalized.split('/').pop();
+            if (baseName) filesInPlan.add(baseName);
+          }
+
+          // Extract file names from task descriptions
+          const fileMatches = item.task.match(/[\w.-]+\.(js|html|css|sql|md|json|env)/gi);
+          if (fileMatches) {
+            fileMatches.forEach(f => filesInPlan.add(f.toLowerCase()));
+          }
+        });
+
+        // 4. Add missing required files to work items
+        requiredFiles.forEach(file => {
+          const filePath = this.getFilePath(file.category, file.name);
+          const normalizedPath = filePath.toLowerCase();
+          const normalizedName = file.name.toLowerCase();
+
+          if (!filesInPlan.has(normalizedPath) && !filesInPlan.has(normalizedName)) {
+            const owner = this.getFileOwner(file.category, file.name);
+            planJson.workItems.push({
+              id: `file-${file.name}`,
+              owner,
+              file: filePath,
+              task: `Create ${filePath} (${file.category}): ${file.description}`
+            });
+            this.info({ file: filePath }, "Added missing required file to plan");
+          }
+        });
+
+        // 4b. Add product image tasks when images are requested
+        const wantsImages = /\b(images?|photos?|assets?)\b/i.test(userInput || "");
+        if (wantsImages) {
+          const imageNames = [
+            "coffee-1.jpg",
+            "coffee-2.jpg",
+            "coffee-3.jpg",
+            "coffee-4.jpg",
+            "coffee-5.jpg",
+            "coffee-6.jpg"
+          ];
+
+          imageNames.forEach(name => {
+            const imagePath = `frontend/img/${name}`;
+            const normalized = imagePath.toLowerCase();
+            if (!filesInPlan.has(normalized) && !filesInPlan.has(name.toLowerCase())) {
+              planJson.workItems.push({
+                id: `image-${name}`,
+                owner: "backend",
+                file: imagePath,
+                task: `Generate product image ${imagePath} for the coffee catalog.`
+              });
+              this.info({ file: imagePath }, "Added image generation task to plan");
+            }
+          });
+        }
+
+        // 5. Update required agents from template
+        if (requirements.agentsNeeded) {
+          planJson.requiredAgents = requirements.agentsNeeded;
+          planJson.consensusLevel = requirements.agentsNeeded.consensusLevel || "single";
+          this.info({ agentsNeeded: requirements.agentsNeeded }, "Updated agents from project template");
+        }
+      }
+    }
+
+    // Set default required agents if not provided by LLM or template
     if (!planJson.requiredAgents) {
       planJson.requiredAgents = {
         security: false,  // Only if needed
@@ -150,6 +268,20 @@ export class ManagerAgent extends BaseAgent {
     if (!planJson.consensusLevel) {
       const needsConsensus = planJson.requiredAgents.security || planJson.requiredAgents.legal;
       planJson.consensusLevel = needsConsensus ? "consensus" : "single";
+    }
+
+    if (researchOnly) {
+      const writerItems = planJson.workItems.filter(w => w.owner === "writer");
+      planJson.kind = "text";
+      planJson.workItems = writerItems.length > 0
+        ? writerItems
+        : [{
+            id: `research-${iteration}`,
+            owner: "writer",
+            task: `Research and provide a comprehensive evidence-based answer for: ${userInput}`
+          }];
+      planJson.requiredAgents = { security: false, qa: false, legal: false };
+      planJson.consensusLevel = "consensus";
     }
 
     this.info({
@@ -381,6 +513,167 @@ async present({ userInput, iteration, traceId, qa, security, tests, merged, deli
       ...stats,
       message: `💰 SAVINGS: Hit rate: ${stats.hitRate}, Estimated savings: ${stats.estimatedSavings}`
     };
+  }
+
+  /**
+   * Detect project type from user input
+   * Matches keywords to known project templates
+   */
+  detectProjectType(userInput) {
+    if (!userInput || typeof userInput !== 'string') {
+      return null;
+    }
+    
+    const input = userInput.toLowerCase();
+
+    // Pizza delivery app
+    if (input.includes("pizza") && (input.includes("delivery") || input.includes("shop") || input.includes("restaurant"))) {
+      return "pizza-delivery";
+    }
+
+    // Web application (full stack)
+    const mentionsFrontend = input.includes("frontend") || input.includes("ui") || input.includes("website") || input.includes("web app") || input.includes("web application");
+    const mentionsBackend = input.includes("backend") || input.includes("api") || input.includes("server");
+    const mentionsDatabase = input.includes("database") || input.includes("postgres") || input.includes("sql");
+    const mentionsDocs = input.includes("docs") || input.includes("documentation") || input.includes("readme");
+    const mentionsPlatform = input.includes("platform") || input.includes("e-commerce") || input.includes("ecommerce") || input.includes("subscription") || input.includes("enterprise");
+
+    if ((mentionsFrontend || mentionsPlatform) && (mentionsBackend || mentionsDatabase || mentionsDocs)) {
+      return "web-app";
+    }
+
+    // Calculator app
+    if (input.includes("calculator") && !input.includes("api")) {
+      return "calculator";
+    }
+
+    // Game
+    if (input.includes("game") || input.includes("card game") || input.includes("browser game")) {
+      return "game";
+    }
+
+    // REST API
+    if ((input.includes("api") || input.includes("rest")) && 
+        !input.includes("frontend") && !input.includes("ui")) {
+      return "rest-api";
+    }
+
+    // Default: web-app for any full-stack request
+    if (input.includes("complete") && input.includes("app")) {
+      return "web-app";
+    }
+
+    return null;
+  }
+
+  /**
+   * Determine which agent should own a file
+   */
+  getFileOwner(category, fileName) {
+    const file = fileName.toLowerCase();
+
+    // Frontend files
+    if (category === "frontend" || file.endsWith(".html") || file.endsWith(".css") || 
+        file === "app.js" || file === "script.js" || file === "game.js") {
+      return "frontend";
+    }
+
+    // Backend files
+    if (category === "backend" || category === "database" || 
+        file === "server.js" || file.endsWith(".sql") || file === "package.json") {
+      return "backend";
+    }
+
+    // Documentation files
+    if (category === "docs" || file.endsWith(".md")) {
+      return "writer";
+    }
+
+    // Default based on file type
+    if (file.endsWith(".html") || file.endsWith(".css") || file === "app.js") {
+      return "frontend";
+    }
+    if (file.endsWith(".js") && !file.endsWith(".sql")) {
+      return "backend";
+    }
+    if (file.endsWith(".sql") || file === ".env.example") {
+      return "backend";
+    }
+
+    return "writer"; // Default to documentation
+  }
+
+  /**
+   * Map a file into its standard folder based on category
+   */
+  getFilePath(category, fileName) {
+    if (!fileName) {
+      return fileName;
+    }
+
+    const normalized = fileName.replace(/^\//, "");
+    if (normalized.includes("/")) {
+      return normalized;
+    }
+
+    if (category === "frontend") {
+      return `frontend/${normalized}`;
+    }
+
+    if (category === "backend") {
+      return `backend/${normalized}`;
+    }
+
+    if (category === "database") {
+      return `database/${normalized}`;
+    }
+
+    if (category === "docs") {
+      return `docs/${normalized}`;
+    }
+
+    return normalized;
+  }
+
+  normalizeOutputPath(outputPath) {
+    if (!outputPath || typeof outputPath !== "string") {
+      return null;
+    }
+
+    let cleaned = outputPath.replace(/\\/g, "/").replace(/^\.?\/?output\//i, "");
+    cleaned = cleaned.replace(/^\/?/, "");
+
+    if (cleaned.endsWith("/")) {
+      return null;
+    }
+
+    const parts = cleaned.split("/");
+    const knownFolders = new Set(["frontend", "backend", "database", "docs", "img", "assets"]);
+
+    if (parts.length > 1 && !knownFolders.has(parts[0]) && parts[1] && parts[1].includes(".")) {
+      cleaned = parts.slice(1).join("/");
+    }
+
+    if (!cleaned.includes("/")) {
+      const lower = cleaned.toLowerCase();
+      if (lower.endsWith(".md")) {
+        return this.getFilePath("docs", cleaned);
+      }
+      if (lower.endsWith(".sql")) {
+        return this.getFilePath("database", cleaned);
+      }
+      if (lower.endsWith(".html") || lower.endsWith(".css") || lower.endsWith(".js")) {
+        return this.getFilePath("frontend", cleaned);
+      }
+      if (lower.endsWith(".json") || lower.includes(".env")) {
+        return this.getFilePath("backend", cleaned);
+      }
+      if (lower === "server.js" || lower === "package.json") {
+        return this.getFilePath("backend", cleaned);
+      }
+    }
+
+    return cleaned;
   }
 }
 

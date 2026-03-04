@@ -6,6 +6,8 @@
   "description": "Fully operational AI company with 20+ specialist agents and multi-LLM consensus",
   "scripts": {
     "start": "node src/index.js",
+    "research": "node src/index.js --research-only",
+    "dkp-bot": "node src/tools/xrplDkpBot.js",
     "dev": "node --watch src/index.js",
     "demo": "node src/companyDemo.js",
     "orchestrator-demo": "node src/orchestratorDemo.js",
@@ -29,11 +31,13 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
     "@google/generative-ai": "^0.17.0",
+    "axios": "^1.13.5",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",
     "openai": "^6.22.0",
     "pdfkit": "^0.17.2",
-    "simple-git": "^3.31.1"
+    "simple-git": "^3.31.1",
+    "xrpl": "^4.4.2"
   },
   "engines": {
     "node": ">=18.0.0"

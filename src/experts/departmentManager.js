@@ -4,24 +4,24 @@
  * Like a CEO coordinating all company departments
  */
 
-import { BackendCoderAgent } from "./agents/backendCoderAgent.js";
-import { FrontendCoderAgent } from "./agents/frontendCoderAgent.js";
-import { ManagerAgent } from "./agents/managerAgent.js";
-import { QAManagerAgent } from "./agents/qaManagerAgent.js";
-import { SecurityManagerAgent } from "./agents/securityManagerAgent.js";
-import { FixerAgent } from "./agents/fixerAgent.js";
-import { TestRunnerAgent } from "./agents/testRunnerAgent.js";
-import { WriterAgent } from "./agents/writerAgent.js";
-import { LegalSpecialistAgent } from "./agents/legalSpecialistAgent.js";
-import { MarketingStrategistAgent } from "./agents/marketingStrategistAgent.js";
-import { AccountingAgent } from "./agents/accountingAgent.js";
-import { DevOpsAgent } from "./agents/devopsAgent.js";
-import { DataAnalystAgent } from "./agents/dataAnalystAgent.js";
-import { CustomerSuccessAgent } from "./agents/customerSuccessAgent.js";
-import { ProductManagerAgent } from "./agents/productManagerAgent.js";
-import { ArchitectureAgent } from "./agents/architectureAgent.js";
-import { ResearchAgent } from "./agents/researchAgent.js";
-import { ComplianceOfficerAgent } from "./agents/complianceOfficerAgent.js";
+import { BackendCoderAgent } from "../agents/backendCoderAgent.js";
+import { FrontendCoderAgent } from "../agents/frontendCoderAgent.js";
+import { ManagerAgent } from "../agents/managerAgent.js";
+import { QAManagerAgent } from "../agents/qaManagerAgent.js";
+import { SecurityManagerAgent } from "../agents/securityManagerAgent.js";
+import { FixerAgent } from "../agents/fixerAgent.js";
+import { TestRunnerAgent } from "../agents/testRunnerAgent.js";
+import { WriterAgent } from "../agents/writerAgent.js";
+import { LegalSpecialistAgent } from "../agents/legalSpecialistAgent.js";
+import { MarketingStrategistAgent } from "../agents/marketingStrategistAgent.js";
+import { AccountingAgent } from "../agents/accountingAgent.js";
+import { DevOpsAgent } from "../agents/devopsAgent.js";
+import { DataAnalystAgent } from "../agents/dataAnalystAgent.js";
+import { CustomerSuccessAgent } from "../agents/customerSuccessAgent.js";
+import { ProductManagerAgent } from "../agents/productManagerAgent.js";
+import { ArchitectureAgent } from "../agents/architectureAgent.js";
+import { ResearchAgent } from "../agents/researchAgent.js";
+import { ComplianceOfficerAgent } from "../agents/complianceOfficerAgent.js";
 
 export class DepartmentManager {
   constructor({ logger = null, multiLlmSystem = null, config = {} } = {}) {

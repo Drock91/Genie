@@ -64,7 +64,7 @@ export const LLM_CONFIGS = {
     features: ["fast", "cost-effective"]
   },
 
-  // Google Models (if integrated)
+  // Google Models
   GOOGLE_GEMINI_PRO: {
     provider: "google",
     model: "gemini-2.0-flash",
@@ -72,6 +72,58 @@ export const LLM_CONFIGS = {
     cost: "medium",
     latency: "fast",
     features: ["multimodal", "latest"]
+  },
+
+  // Mistral Models
+  MISTRAL_LARGE: {
+    provider: "mistral",
+    model: "mistral-large-latest",
+    type: "paid",
+    cost: "medium",
+    latency: "fast",
+    features: ["json-mode", "reasoning"]
+  },
+  MISTRAL_MEDIUM: {
+    provider: "mistral",
+    model: "mistral-medium-latest",
+    type: "paid",
+    cost: "low",
+    latency: "fast",
+    features: ["balanced"]
+  },
+  MISTRAL_SMALL: {
+    provider: "mistral",
+    model: "mistral-small-latest",
+    type: "paid",
+    cost: "low",
+    latency: "very-fast",
+    features: ["fast", "cost-effective"]
+  },
+
+  // AI21 Models
+  AI21_JAMBA_ULTRA: {
+    provider: "ai21",
+    model: "jambachat",
+    type: "paid",
+    cost: "medium",
+    latency: "moderate",
+    features: ["reasoning", "long-context"]
+  },
+  AI21_J2_ULTRA: {
+    provider: "ai21",
+    model: "j2-ultra",
+    type: "paid",
+    cost: "high",
+    latency: "moderate",
+    features: ["best-quality", "long-context"]
+  },
+  AI21_J2_MID: {
+    provider: "ai21",
+    model: "j2-mid",
+    type: "paid",
+    cost: "low",
+    latency: "fast",
+    features: ["balanced"]
   }
 };
 
@@ -82,11 +134,15 @@ export const LLM_CONFIGS = {
 export const LLM_POOLS = {
   free: [
     LLM_CONFIGS.OPENAI_GPT4O_MINI,
-    LLM_CONFIGS.GOOGLE_GEMINI_PRO
+    LLM_CONFIGS.MISTRAL_SMALL,
+    LLM_CONFIGS.AI21_J2_MID
   ],
   paid: [
     LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.GOOGLE_GEMINI_PRO
+    LLM_CONFIGS.CLAUDE_OPUS,
+    LLM_CONFIGS.GOOGLE_GEMINI_PRO,
+    LLM_CONFIGS.MISTRAL_LARGE,
+    LLM_CONFIGS.AI21_J2_ULTRA
   ]
 };
 
@@ -94,39 +150,52 @@ export const LLM_POOLS = {
  * Preset LLM combinations for different scenarios
  */
 export const LLM_PROFILES = {
-  // Maximum quality and consensus - use best paid models
+  // Maximum quality and consensus - use best paid models across providers
   premium: [
     LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.GOOGLE_GEMINI_PRO
+    LLM_CONFIGS.CLAUDE_OPUS,
+    LLM_CONFIGS.MISTRAL_LARGE
   ],
 
-  // Balance quality and cost
+  // Balance quality and cost with diverse providers
   balanced: [
     LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.GOOGLE_GEMINI_PRO
+    LLM_CONFIGS.MISTRAL_LARGE,
+    LLM_CONFIGS.CLAUDE_SONNET
   ],
 
   // Cost-optimized but still good quality
   economical: [
     LLM_CONFIGS.OPENAI_GPT4O_MINI,
-    LLM_CONFIGS.GOOGLE_GEMINI_PRO
+    LLM_CONFIGS.MISTRAL_SMALL,
+    LLM_CONFIGS.AI21_J2_MID
   ],
 
   // Speed-focused for latency-sensitive tasks
   fast: [
-    LLM_CONFIGS.OPENAI_GPT4O_MINI
+    LLM_CONFIGS.OPENAI_GPT4O_MINI,
+    LLM_CONFIGS.MISTRAL_SMALL
   ],
 
-  // Accuracy-focused with best reasoners
+  // Accuracy-focused with best reasoners across providers
   accurate: [
     LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.GOOGLE_GEMINI_PRO
+    LLM_CONFIGS.CLAUDE_OPUS,
+    LLM_CONFIGS.MISTRAL_LARGE
+  ],
+
+  // Diverse provider consensus with 4 different LLMs
+  diverse_consensus: [
+    LLM_CONFIGS.OPENAI_GPT4O,
+    LLM_CONFIGS.CLAUDE_OPUS,
+    LLM_CONFIGS.MISTRAL_LARGE,
+    LLM_CONFIGS.AI21_JAMBA_ULTRA
   ],
 
   // Two-model consensus for quick decisions
   quick_consensus: [
     LLM_CONFIGS.OPENAI_GPT4O,
-    LLM_CONFIGS.GOOGLE_GEMINI_PRO
+    LLM_CONFIGS.MISTRAL_LARGE
   ],
 
   // Single model (fallback)

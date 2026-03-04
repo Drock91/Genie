@@ -10,6 +10,8 @@ import { MetricsCollector } from "./util/metricsCollector.js";
 import { WorkflowReporter } from "./util/workflowReporter.js";
 import { InteractiveWorkflow } from "./util/interactiveWorkflow.js";
 import { LLMUsageTracker } from "./util/llmUsageTracker.js";
+import { parseArguments, validateArguments, getUsageText } from "./util/argumentParser.js";
+import { extractProjectName, extractOutputFolder, isPdfRequested, isRefinementRequest } from "./util/inputParser.js";
 
 import { ManagerAgent } from "./agents/managerAgent.js";
 import { BackendCoderAgent } from "./agents/backendCoderAgent.js";
@@ -22,8 +24,21 @@ import { WriterAgent } from "./agents/writerAgent.js";
 import { RequestRefinerAgent } from "./agents/requestRefinerAgent.js";
 import { CodeRefinerAgent } from "./agents/codeRefinerAgent.js";
 import { DeliveryManagerAgent } from "./agents/deliveryManagerAgent.js";
+import { DatabaseArchitectAgent } from "./agents/databaseArchitectAgent.js";
+import { UserAuthAgent } from "./agents/userAuthAgent.js";
+import { ApiIntegrationAgent } from "./agents/apiIntegrationAgent.js";
+import { SecurityHardeningAgent } from "./agents/securityHardeningAgent.js";
+import { MonitoringAgent } from "./agents/monitoringAgent.js";
+import { DeploymentAgent } from "./agents/deploymentAgent.js";
+import { TestGenerationAgent } from "./agents/testGenerationAgent.js";
+import { APIDocumentationAgent } from "./agents/apiDocumentationAgent.js";
+import { PerformanceOptimizationAgent } from "./agents/performanceOptimizationAgent.js";
 import { getConfig } from "./util/config.js";
 import { initializeMultiLlm } from "./llm/multiLlmSystem.js";
+import { generateAgentSummaryReport, generateRequestSerial } from "./util/agentSummaryGenerator.js";
+
+// Generate unique serial for this request
+const REQUEST_SERIAL = generateRequestSerial();
 
 let config;
 try {
@@ -33,51 +48,33 @@ try {
   process.exit(1);
 }
 
-// Check for flags
-const args = process.argv.slice(2);
-const interactiveMode = args.includes('--interactive') || args.includes('-i');
-const powerArg = args.find(arg => arg.startsWith('--power='));
-const powerIndex = args.findIndex(arg => arg === '--power');
-const rawPower = powerArg
-  ? powerArg.split('=')[1]
-  : (powerIndex >= 0 ? args[powerIndex + 1] : null);
-const powerLevel = rawPower ? rawPower.toLowerCase() : null;
-const userInput = args.filter(arg => !arg.startsWith('--') && !arg.startsWith('-')).join(" ").trim();
+// Parse and validate command-line arguments
+const parsed = parseArguments(process.argv.slice(2));
+const validation = validateArguments(parsed);
 
-if (!userInput) {
-  logger.error({}, "No user input provided");
-  console.log('Usage: npm start -- "build me X"');
-  console.log('       npm start -- --interactive "build me X"  (for interactive mode)');
+if (!validation.valid) {
+  logger.error({}, validation.error);
+  console.log(getUsageText());
   process.exit(1);
 }
 
-// Helper to extract project name from user input
-function extractProjectName(userInput) {
-  const patterns = [
-    /(?:build|create|make)\s+(?:a\s+)?(?:app|project|system|platform|called\s+)?["`']?(\w+)["`']?/i,
-    /(?:product|company|service)\s+(?:called|named)\s+["`']?(\w+)["`']?/i,
-    /^\s*(\w+)\s*(?:app|project|system)/i
-  ];
-  for (const pattern of patterns) {
-    const match = userInput.match(pattern);
-    if (match && match[1]) {
-      return match[1].charAt(0).toUpperCase() + match[1].slice(1);
-    }
-  }
-  return "Project";
+const userInput = parsed.input;
+const interactiveMode = parsed.interactive;
+const researchOnly = parsed.researchOnly;
+const powerLevel = parsed.power;
+
+console.log(`\n┌─────────────────────────────────────────────┐`);
+console.log(`│ 🎯 REQUEST SERIAL: ${REQUEST_SERIAL}      │`);
+console.log(`└─────────────────────────────────────────────┘\n`);
+
+if (researchOnly) {
+  console.log("🔬 Research-Only Mode Enabled (consensus analysis, no code/file generation)\n");
 }
 
-function extractOutputFolder(userInput) {
-  const slashMatch = userInput.match(/output\/?([\w\-\/]+)/i);
-  if (slashMatch && slashMatch[1]) {
-    return slashMatch[1].replace(/\/+$/, "");
-  }
-  const namedMatch = userInput.match(/output(?:\s+folder)?\s+(?:called|named)\s+["']?([\w\-\/]+)["']?/i);
-  if (namedMatch && namedMatch[1]) {
-    return namedMatch[1].replace(/\/+$/, "");
-  }
-  return null;
-}
+// Store original user input for reporting
+const ORIGINAL_INPUT = userInput;
+
+// Note: extractProjectName and extractOutputFolder are now imported from inputParser.js
 
 // Wrap in async IIFE for top-level await
 (async () => {
@@ -99,7 +96,20 @@ function extractOutputFolder(userInput) {
       fixer: new FixerAgent({ logger }),
       writer: new WriterAgent({ logger }),
       delivery: new DeliveryManagerAgent({ logger }),
-    };
+      // === CRITICAL PATH AGENTS (Enterprise) ===
+      databaseArchitect: new DatabaseArchitectAgent({ logger, multiLlmSystem: global.multiLlmSystem }),
+      userAuth: new UserAuthAgent({ logger, multiLlmSystem: global.multiLlmSystem }),
+      apiIntegration: new ApiIntegrationAgent({ logger, multiLlmSystem: global.multiLlmSystem }),
+      // === PRODUCTION SUPPORT AGENTS ===
+      securityHardening: new SecurityHardeningAgent({ logger, multiLlmSystem: global.multiLlmSystem }),
+      monitoring: new MonitoringAgent({ logger, multiLlmSystem: global.multiLlmSystem }),
+      // === DEPLOYMENT AGENT ===
+      deployment: new DeploymentAgent({ logger, multiLlmSystem: global.multiLlmSystem }),
+      // === PHASE 3 AGENTS ===
+      testGeneration: new TestGenerationAgent({ logger, multiLlmSystem: global.multiLlmSystem }),
+      apiDocumentation: new APIDocumentationAgent({ logger, multiLlmSystem: global.multiLlmSystem }),
+      performanceOptimization: new PerformanceOptimizationAgent({ logger, multiLlmSystem: global.multiLlmSystem }),
+    }
 
     // Extract project name and use as subfolder in output
     const outputFolder = extractOutputFolder(userInput);
@@ -123,6 +133,7 @@ function extractOutputFolder(userInput) {
 
     const startTime = Date.now();
     let result;
+    let REFINED_INPUT = ORIGINAL_INPUT;  // Initialize here so it's available in all code paths
 
     if (interactiveMode) {
       // === INTERACTIVE MODE ===
@@ -134,7 +145,8 @@ function extractOutputFolder(userInput) {
         logger,
         config: {
           maxIterations: config.maxIterations,
-          powerLevel
+          powerLevel,
+          researchOnly
         },
         executor,
         store,
@@ -155,8 +167,10 @@ function extractOutputFolder(userInput) {
 
       // Use refined request if confidence is high, otherwise ask user
       let finalInput = userInput;
+      
       if (refinementResult.confidence >= 70) {
         finalInput = refinementResult.refined;
+        REFINED_INPUT = refinementResult.refined;  // Capture the refined version
         logger.info({ 
           original: userInput, 
           refined: finalInput, 
@@ -173,7 +187,8 @@ function extractOutputFolder(userInput) {
         logger,
         config: {
           maxIterations: config.maxIterations,
-          powerLevel
+          powerLevel,
+          researchOnly
         },
         executor,
         store,
@@ -215,6 +230,22 @@ function extractOutputFolder(userInput) {
         for (const file of result.executedFiles) {
           console.log(`✓ ${file.path}`);
         }
+      }
+
+      // Generate automatic agent summary report
+      try {
+        console.log("\n📊 Generating agent execution summary...");
+        // In standard mode, REFINED_INPUT is captured; in interactive mode, use original
+        const refinedInputForReport = interactiveMode ? ORIGINAL_INPUT : REFINED_INPUT;
+        const summaryResult = await generateAgentSummaryReport(
+          result.traceId, 
+          REQUEST_SERIAL, 
+          ORIGINAL_INPUT, 
+          refinedInputForReport
+        );
+        console.log(`\n✅ Agent summary report saved to: ${summaryResult.path}`);
+      } catch (err) {
+        logger.warn({ error: err.message }, "Failed to generate summary report");
       }
     }
 

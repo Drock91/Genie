@@ -7,3 +7,14 @@ node_modules/
 logs/
 requests/
 output/
+reports/
+
+# Ignore testing and examples (development only)
+testing/
+examples/
+
+# Ignore temporary files
+.temp_run_output.txt
+test_output.log
+package-lock.json
+

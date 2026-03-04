@@ -73,33 +73,56 @@ export class HtmlImageEmbedder {
     
     // Hero images
     if (name.includes('hero')) {
-      return `An inviting, upscale Italian gelato shop storefront, warm ambient lighting, 
-        beautiful gelato display, professional photography, welcoming atmosphere, 
-        terracotta and cream color palette, premium quality`;
+      return `A modern, premium ecommerce hero image with warm lighting, 
+        clean composition, professional photography, inviting atmosphere, 
+        high-end product branding`;
     }
     
-    // Flavor/product images
+    // Burger-specific prompts
+    const burgerMap = {
+      'burger-classic': 'A perfectly grilled classic cheeseburger with melted cheddar cheese, fresh lettuce, tomato, and onion on a toasted bun, professional food photography, appetizing presentation, warm lighting',
+      'burger-bacon': 'A delicious bacon cheeseburger with crispy bacon strips, double melted cheese, and fresh toppings on a brioche bun, professional food photography, high-end restaurant quality',
+      'burger-double': 'A double beef patty burger with two juicy patties stacked high with cheese and toppings, mouthwatering food photography, professional lighting',
+      'burger-spicy': 'A spicy burger with jalapeño peppers, habanero sauce, fresh toppings, and a gourmet bun, vibrant food photography, appetizing lighting'
+    };
+    
+    // Check for burger-specific filenames first
+    for (const [burgerName, prompt] of Object.entries(burgerMap)) {
+      if (name.includes(burgerName)) {
+        return prompt;
+      }
+    }
+    
+    // Generic burger detection
+    if (name.includes('burger')) {
+      return 'A delicious gourmet cheeseburger with fresh ingredients, professional food photography, restaurant quality, appetizing styling, studio lighting';
+    }
+
+    // Flavor/product images (legacy support)
     const flavorMap = {
-      'chocolate': 'Rich, dark chocolate',
+      'coffee': 'Freshly brewed coffee beans and crema',
+      'espresso': 'Rich espresso shot with crema',
+      'latte': 'Creamy latte art in a ceramic cup',
+      'bean': 'Artisanal coffee beans on a wooden surface',
+      'roast': 'Dark roasted coffee beans with warm tones',
+      'chocolate': 'Rich dark chocolate',
       'hazelnut': 'with roasted hazelnuts',
       'strawberry': 'Fresh strawberry',
       'basil': 'with fresh basil',
       'mango': 'Exotic mango',
       'passion': 'with passion fruit',
       'sicilian': 'Sicilian lemon',
-      'lemon': 'Fresh lemon sorbetto',
+      'lemon': 'Fresh lemon',
       'madagascar': 'Madagascar vanilla',
       'vanilla': 'Premium vanilla',
-      'espresso': 'Italian espresso',
-      'coffee': 'Coffee gelato',
       'coconut': 'Creamy coconut',
       'lime': 'with lime',
       'georgia': 'Georgia peach',
       'peach': 'Fresh peach',
-      'cream': 'Creamy gelato'
+      'cream': 'Creamy texture'
     };
     
-    let flavorDesc = 'specialty gelato';
+    let flavorDesc = 'premium product';
     for (const [key, desc] of Object.entries(flavorMap)) {
       if (name.includes(key)) {
         flavorDesc = desc;
@@ -107,10 +130,9 @@ export class HtmlImageEmbedder {
       }
     }
     
-    return `A beautifully plated scoop of ${flavorDesc} gelato, 
-      artisanal Italian style, professional food photography, 
-      studio lighting, appetizing creamy texture, premium quality, 
-      on white porcelain background, shallow depth of field`;
+    return `A high-end product photo of ${flavorDesc}, 
+      professional studio lighting, clean background, 
+      premium quality, sharp focus, commercial photography`;
   }
 
   /**

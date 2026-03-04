@@ -71,7 +71,8 @@ export class InteractiveWorkflow {
       const planPreview = await this.agents.manager.plan({ 
         userInput: currentInput, 
         iteration: 1, 
-        traceId: 'preview' 
+        traceId: 'preview',
+        researchOnly: Boolean(this.config?.researchOnly)
       });
 
       if (this.config?.powerLevel) {
@@ -82,7 +83,9 @@ export class InteractiveWorkflow {
         }
       }
       
-      if (planPreview.kind === 'code') {
+      if (this.config?.researchOnly) {
+        console.log("  • Writer (research synthesis)");
+      } else if (planPreview.kind === 'code') {
         console.log("  • Backend Coder");
         console.log("  • Frontend Coder");
       } else {

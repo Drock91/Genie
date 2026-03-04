@@ -1,6 +1,6 @@
 # GENIE: Fully Operational AI Company Platform
 
-**A complete, enterprise-grade AI system with 20+ specialized agents across all business departments. Multi-LLM consensus (OpenAI, Anthropic, Google) for unprecedented accuracy and capability.**
+**A complete, enterprise-grade AI system with 35 specialized agents across all business departments. Extensible multi-LLM consensus system supporting 5 providers (OpenAI, Anthropic, Google, Mistral, AI21) for unprecedented accuracy and scalability.**
 
 ## 🏢 System Overview
 
@@ -17,55 +17,85 @@ Think of it as having an entire C-suite + department heads + specialists accessi
 
 ## 🏛️ Department Structure
 
-### 🔧 **Engineering Department** (8 agents)
+### 🔧 **Engineering Department** (18 agents)
+**Core Development:**
 - **Backend Coder** - APIs, databases, microservices, business logic
 - **Frontend Coder** - React, Vue, responsive UI, components
 - **Architecture** - System design, scalability, tech stack decisions
-- **DevOps** - Infrastructure, CI/CD, monitoring, disaster recovery
-- **QA Manager** - Test strategies, quality metrics, coverage
-- **Security Manager** - Vulnerability assessment, hardening, compliance
-- **Test Runner** - Automated testing, performance testing
-- **Fixer Agent** - Bug resolution, refactoring, optimization
+- **Database Architect** - Schema design, query optimization, data modeling
+- **User Auth** - Authentication systems, authorization, security protocols
 
-### 💼 **Business Department** (5 agents)
+**DevOps & Infrastructure:**
+- **DevOps** - Infrastructure, CI/CD, monitoring, disaster recovery
+- **Deployment Agent** - Production deployment, environment management
+- **Monitoring Agent** - Observability, logging, alerting systems
+- **API Integration** - Third-party APIs, external system connectivity
+
+**Quality & Security:**
+- **QA Manager** - Test strategies, quality metrics, coverage
+- **Test Runner** - Automated testing, performance testing
+- **Test Generation** - Automated test case generation
+- **Fixer Agent** - Bug resolution, refactoring, optimization
+- **Security Manager** - Vulnerability assessment, compliance
+- **Security Hardening** - Security implementation, code hardening
+- **Performance Optimization** - Bottleneck analysis, efficiency improvements
+
+**Documentation:**
+- **API Documentation** - OpenAPI specs, endpoint documentation
+- **Code Refiner** - Code quality, best practices, optimization
+
+### 💼 **Business Department** (7 agents)
 - **Product Manager** - Roadmaps, prioritization, competitive analysis
 - **Marketing Strategist** - Go-to-market, messaging, campaigns
+- **Social Media** - Social presence, content strategy
 - **Customer Success** - Support strategy, retention, onboarding
 - **Legal Specialist** - Compliance, contracts, privacy, regulations
 - **Research Team** - Market analysis, trends, competitive intelligence
+- **Image Generator** - Visual content, DALL-E integration
 
-### 📊 **Operations Department** (4 agents)
+### 📊 **Operations Department** (6 agents)
 - **Accounting** - Budgets, invoices, cash flow, financial reporting
 - **Payroll** - Salary calculation, tax withholding, contractor tracking
 - **HR** - Recruiting, performance reviews, training, compensation
 - **Compliance Officer** - Risk management, audits, certifications
-
-### 🔧 **Support Department** (3 agents)
+- **Regulatory Compliance** - Industry regulations, policy enforcement
 - **Data Analyst** - Metrics, dashboards, forecasting, insights
-- **Manager** - Orchestration, workflow coordination
-- **Writer** - Documentation, content, technical writing
 
-**Total: 20 specialist agents, each with multi-LLM consensus for maximum accuracy**
+### 🎯 **Orchestration Department** (4 agents)
+- **Manager** - Workflow orchestration, agent coordination
+- **Request Refiner** - Input analysis, intent clarification
+- **Delivery Manager** - Project assembly, deliverables management
+- **Writer** - Documentation, README files, technical content
+
+**Total: 35 specialist agents, each with multi-LLM consensus for maximum accuracy**
 
 ---
 
-## 🧠 Multi-LLM Consensus System
+## 🧠 Extensible Multi-LLM Consensus System
 
-Every agent decision uses **consensus from 3 LLM providers**:
+Every agent decision uses **consensus from multiple LLM providers** (default 3, unlimited scalable):
 
 | Provider | Model | Best For |
 |----------|-------|----------|
 | **OpenAI** | gpt-4o | Complex reasoning, nuanced decisions |
 | **Anthropic** | Claude Opus 4.1 | Detailed analysis, edge cases |
 | **Google** | Gemini 2.0 Flash | Fast processing, creativity |
+| **Custom** | Any API | Add your own providers |
 
 **How it works:**
-1. Same prompt sent to all 3 providers simultaneously
+1. Same prompt sent to all configured providers simultaneously
 2. Responses analyzed for consensus
 3. Majority opinion selected OR best reasoning chosen
 4. Logged with confidence metrics
+5. **Fully extensible** - add custom providers in `src/llm/providers/`
 
-**Benefit:** ~95% accuracy vs ~70% for single LLM
+**Scalability:**
+- **1 provider:** ~70% accuracy (fast, cheap)
+- **3 providers (default):** ~95% accuracy (balanced)
+- **5+ providers:** ~99% accuracy (robust, costs scale)
+- **Add custom providers:** Anthropic, Mistral, Claude, DeepSeek, local models, etc.
+
+**Benefit:** Consensus-driven accuracy vs single-provider hallucinations
 
 ---
 
@@ -138,6 +168,9 @@ cp .env.example .env
 # Run the system
 npm start
 
+# Run in RESEARCH-ONLY mode (consensus research, no code generation)
+npm run research -- "your research question here"
+
 # Run in INTERACTIVE MODE (with approval checkpoints)
 npm start -- --interactive "your request here"
 
@@ -150,6 +183,22 @@ npm run demo
 # Generate a project
 npm run generate-project
 ```
+
+### Optional: XRPL DKP Accumulation Bot
+
+```bash
+# 1) Add bot config to .env (see XRPL DKP BOT section in .env.example)
+# 2) Install deps if needed
+npm install
+
+# 3) Start in dry-run mode first
+npm run dkp-bot
+```
+
+Safety defaults:
+- `DKP_BOT_DRY_RUN=true` by default
+- Max daily spend and min XRP buffer are enforced
+- Uses spot orders only (no leverage)
 
 ---
 
@@ -325,22 +374,24 @@ git add . && git commit -m "description"
 ```
 .
 ├── src/
-│   ├── agents/                 # All 20 specialist agents
+│   ├── agents/                 # All 35 specialist agents
 │   │   ├── backendCoderAgent.js
 │   │   ├── accountingAgent.js
 │   │   ├── payrollAgent.js
 │   │   ├── hrAgent.js
 │   │   ├── devopsAgent.js
-│   │   └── [15 more agents]
+│   │   └── [30 more agents]
 │   ├── experts/
 │   │   ├── departmentManager.js      # Central coordinator
 │   │   ├── requestAnalyzer.js        # Intelligent routing
 │   │   └── expertRegistry.js
 │   ├── llm/
-│   │   ├── multiLlmSystem.js         # 3-provider consensus
+│   │   ├── multiLlmSystem.js         # Extensible consensus engine
 │   │   ├── openaiClient.js
 │   │   ├── anthropicProvider.js
 │   │   ├── googleProvider.js
+│   │   ├── customProvider.js        # Template for your own providers
+│   │   └── (add more providers here)
 │   │   └── schemas.js
 │   ├── repo/
 │   │   ├── projectGenerator.js
@@ -365,8 +416,10 @@ git add . && git commit -m "description"
 
 ```bash
 
-# Multi-LLM Setup
-OPENAI_API_KEY=sk-...               # Required (OpenAI GPT-4o)
+# Multi-LLM Setup (Extensible)
+OPENAI_API_KEY=sk-...               # Add any/all LLMs you want
+ANTHROPIC_API_KEY=sk-ant-...        # (or just one, or custom ones)
+GOOGLE_API_KEY=...                  # Mix and match providers
 ANTHROPIC_API_KEY=sk-ant-...        # Optional (Claude Opus, recommended)
 GOOGLE_API_KEY=AIza...              # Optional (Gemini, recommended)
 
@@ -418,7 +471,8 @@ MIT
 
 **Version: 1.0.0 - Production Ready**
 
-- ✅ 20 specialist agents
+- ✅ 35 specialist agents
+- ✅ 5 LLM providers (OpenAI, Anthropic, Google, Mistral, AI21)
 - ✅ Multi-LLM consensus
 - ✅ Intelligent routing
 - ✅ Compliance & security

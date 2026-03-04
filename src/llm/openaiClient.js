@@ -27,6 +27,31 @@ async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function extractJsonText(text) {
+  let jsonText = text.trim();
+
+  if (jsonText.startsWith("```json")) {
+    jsonText = jsonText.slice(7);
+  } else if (jsonText.startsWith("```")) {
+    jsonText = jsonText.slice(3);
+  }
+
+  if (jsonText.endsWith("```")) {
+    jsonText = jsonText.slice(0, -3);
+  }
+
+  jsonText = jsonText.trim();
+
+  const firstBrace = jsonText.indexOf("{");
+  const lastBrace = jsonText.lastIndexOf("}");
+
+  if (firstBrace === -1 || lastBrace === -1) {
+    throw new Error(`No JSON found in response: ${jsonText.substring(0, 100)}`);
+  }
+
+  return jsonText.substring(firstBrace, lastBrace + 1);
+}
+
 export async function llmJson({ model, system, user, schema, temperature = 0.2, logger = null }) {
   assertKey();
   validateInput(model, system, user, schema);
@@ -65,7 +90,8 @@ export async function llmJson({ model, system, user, schema, temperature = 0.2, 
       const text = resp.choices?.[0]?.message?.content;
       if (!text) throw new Error("No response text from model");
 
-      const parsed = JSON.parse(text);
+      const jsonText = extractJsonText(text);
+      const parsed = JSON.parse(jsonText);
       if (logger) logger.info({ attempt, model }, "LLM success");
       return parsed;
     } catch (err) {

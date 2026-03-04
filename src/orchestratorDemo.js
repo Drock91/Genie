@@ -5,8 +5,8 @@
 
 import { EnhancedOrchestrator } from "./orchestrator.js";
 import { RequestAnalyzer } from "./experts/requestAnalyzer.js";
-import { MultiLlmSystem } from "./llm/multiLlmSystem.js";
-import { Logger } from "./util/logger.js";
+import MultiLlmSystem from "./llm/multiLlmSystem.js";
+import { logger } from "./util/logger.js";
 
 /**
  * Test scenario: Product company formation request
@@ -275,7 +275,13 @@ export async function runAllDemos() {
 }
 
 // Run if executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const isMainModule = path.resolve(process.argv[1]) === path.resolve(__filename);
+
+if (isMainModule) {
   runAllDemos().catch(console.error);
 }
 

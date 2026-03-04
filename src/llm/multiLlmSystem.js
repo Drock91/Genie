@@ -7,6 +7,8 @@ import MultiLlmOrchestrator from "./multiLlmOrchestrator.js";
 import OpenAIProvider from "./providers/openaiProvider.js";
 import AnthropicProvider from "./providers/anthropicProvider.js";
 import GoogleProvider from "./providers/googleProvider.js";
+import MistralProvider from "./providers/mistralProvider.js";
+import AI21Provider from "./providers/ai21Provider.js";
 import { LLM_CONFIGS, LLM_POOLS, LLM_PROFILES } from "./multiLlmConfig.js";
 
 class MultiLlmSystem {
@@ -35,6 +37,16 @@ class MultiLlmSystem {
     try {
       this.logger?.info("Initializing MultiLLM system");
 
+      this.logger?.info({
+        providerKeys: {
+          openai: !!process.env.OPENAI_API_KEY,
+          anthropic: !!process.env.ANTHROPIC_API_KEY,
+          google: !!process.env.GOOGLE_API_KEY,
+          mistral: !!process.env.MISTRAL_API_KEY,
+          ai21: !!process.env.AI21_API_KEY
+        }
+      }, "Provider API key status");
+
       this.orchestrator = new MultiLlmOrchestrator({}, this.logger);
 
       // Register OpenAI provider
@@ -62,6 +74,24 @@ class MultiLlmSystem {
         this.logger?.info("Google provider registered");
       } catch (err) {
         this.logger?.warn({ error: err.message }, "Failed to register Google");
+      }
+
+      // Register Mistral provider
+      try {
+        const mistralProvider = new MistralProvider(this.logger);
+        this.orchestrator.registerProvider("mistral", mistralProvider);
+        this.logger?.info("Mistral provider registered");
+      } catch (err) {
+        this.logger?.warn({ error: err.message }, "Failed to register Mistral");
+      }
+
+      // Register AI21 provider
+      try {
+        const ai21Provider = new AI21Provider(this.logger);
+        this.orchestrator.registerProvider("ai21", ai21Provider);
+        this.logger?.info("AI21 provider registered");
+      } catch (err) {
+        this.logger?.warn({ error: err.message }, "Failed to register AI21");
       }
 
       // Check provider health
