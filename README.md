@@ -184,22 +184,6 @@ npm run demo
 npm run generate-project
 ```
 
-### Optional: XRPL DKP Accumulation Bot
-
-```bash
-# 1) Add bot config to .env (see XRPL DKP BOT section in .env.example)
-# 2) Install deps if needed
-npm install
-
-# 3) Start in dry-run mode first
-npm run dkp-bot
-```
-
-Safety defaults:
-- `DKP_BOT_DRY_RUN=true` by default
-- Max daily spend and min XRP buffer are enforced
-- Uses spot orders only (no leverage)
-
 ---
 
 ## 🤝 Interactive Mode
