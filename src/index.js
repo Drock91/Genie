@@ -34,6 +34,7 @@ import { TestGenerationAgent } from "./agents/testGenerationAgent.js";
 import { APIDocumentationAgent } from "./agents/apiDocumentationAgent.js";
 import { PerformanceOptimizationAgent } from "./agents/performanceOptimizationAgent.js";
 import { NewsAnalysisAgent } from "./agents/newsAnalysisAgent.js";
+import { TaxStrategyAgent } from "./agents/taxStrategyAgent.js";
 import { getConfig } from "./util/config.js";
 import { initializeMultiLlm } from "./llm/multiLlmSystem.js";
 import { generateAgentSummaryReport, generateRequestSerial } from "./util/agentSummaryGenerator.js";
@@ -110,6 +111,9 @@ const ORIGINAL_INPUT = userInput;
       testGeneration: new TestGenerationAgent({ logger, multiLlmSystem: global.multiLlmSystem }),
       apiDocumentation: new APIDocumentationAgent({ logger, multiLlmSystem: global.multiLlmSystem }),
       performanceOptimization: new PerformanceOptimizationAgent({ logger, multiLlmSystem: global.multiLlmSystem }),
+      // === INVESTMENT & TAX AGENTS ===
+      newsAnalysis: new NewsAnalysisAgent({ logger }),
+      taxStrategy: new TaxStrategyAgent({ logger }),
     }
 
     // Extract project name and use as subfolder in output

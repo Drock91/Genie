@@ -17,6 +17,10 @@
     "report:war": "node generate-report.js --war",
     "report:income": "node generate-report.js --income",
     "report:crypto": "node generate-report.js --crypto",
+    "tax": "node tax-strategy.js",
+    "tax:report": "node tax-strategy.js --report",
+    "tax:veteran": "node tax-strategy.js --veteran",
+    "tax:compare": "node tax-strategy.js --compare",
     "test": "node --test src/**/*.test.js",
     "lint": "eslint src/",
     "logs": "tail -f logs/*.log"
