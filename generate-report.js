@@ -107,7 +107,8 @@ async function main() {
         const status = analysis?.error ? "❌ FAILED" : "✅ ANALYZED";
         console.log(`   ${status} ${sector}`);
         if (analysis && !analysis.error) {
-          console.log(`      └─ Best Pick: ${analysis.best_pick?.substring(0, 50) || 'N/A'}...`);
+          const topPick = analysis.top_recommendation || analysis.best_pick || '';
+          console.log(`      └─ Top Pick: ${topPick.substring(0, 60)}...`);
         }
       }
       

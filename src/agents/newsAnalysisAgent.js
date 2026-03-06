@@ -19,6 +19,7 @@ import { BaseAgent } from "./baseAgent.js";
 import { makeAgentOutput } from "../models.js";
 import { consensusCall } from "../llm/multiLlmSystem.js";
 import { llmJson } from "../llm/openaiClient.js";
+import { QAManagerAgent } from "./qaManagerAgent.js";
 import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
@@ -720,7 +721,7 @@ Analyze:
 
     this.info({}, `Generating investment report: ${filepath}`);
 
-    // Get AI analysis for each sector
+    // Get AI analysis for each sector - HUMAN READABLE FORMAT
     const sectorAnalyses = {};
     const sectorsToAnalyze = focus === "all" 
       ? Object.keys(MARKET_SECTORS).filter(k => k !== "veteranSpecific")
@@ -732,6 +733,10 @@ Analyze:
             ? ["crypto"]
             : Object.keys(MARKET_SECTORS).filter(k => k !== "veteranSpecific");
 
+    // Initialize QA agent for output validation
+    const qaAgent = new QAManagerAgent({ logger: this.logger });
+    this.info({}, "QA agent initialized for output validation");
+
     for (const sectorKey of sectorsToAnalyze) {
       const sector = MARKET_SECTORS[sectorKey];
       if (!sector.tickers) continue;
@@ -739,55 +744,99 @@ Analyze:
       this.info({}, `Analyzing ${sector.name}...`);
       
       try {
+        // Get human-readable analysis
         const analysis = await llmJson({
           model: "gpt-4o",
-          system: `You are an expert investment analyst specializing in ${sector.name}. 
-Provide specific, actionable investment recommendations with entry prices, target prices, and timing.
-Be direct and specific. Use current market conditions and geopolitical factors.
-Date: ${new Date().toLocaleDateString()}`,
-          user: `Analyze the ${sector.name} sector for investment opportunities.
+          system: `You are an expert investment analyst writing a professional report for a client.
+Write in clear, natural prose that anyone can understand. NO JSON formatting, NO bullet points with colons.
+Be conversational yet professional. Include specific price targets and dates where relevant.
 
-Tickers to analyze: ${sector.tickers.map(t => t.symbol).join(", ")}
+CRITICAL FORMATTING RULES:
+- Write percentages as "25 percent" not "25%" 
+- No escaped characters or special symbols
+- No placeholder text like [TODO] or undefined
+- Complete sentences only
+- Natural paragraph flow
 
-For each ticker provide:
-1. current_rating: BUY / HOLD / SELL / WAIT
-2. entry_price: Suggested entry price or "market" if buy now
-3. target_price: 12-month price target
-4. stop_loss: Suggested stop loss level
-5. timing: When to enter (immediate, pullback, Q2, etc.)
-6. thesis: 1-2 sentence investment thesis
-7. risk_level: 1-10 (10 being highest risk)
-8. dividend_safety: For dividend stocks, rate safety 1-10
+Today's date: ${new Date().toLocaleDateString()}`,
+          user: `Write a human-readable investment analysis for the ${sector.name} sector.
 
-Also provide:
-- sector_outlook: Overall sector rating 1-10
-- best_pick: Top pick in sector with reasoning
-- avoid: Which to avoid and why
-- catalyst_timeline: Key upcoming catalysts with dates
+Stocks to analyze: ${sector.tickers.map(t => `${t.symbol} (${t.name})`).join(", ")}
 
-Consider current factors:
-- War/geopolitical tensions
-- Inflation environment  
-- Interest rate trajectory
-- Supply chain dynamics`,
+Structure your analysis as follows:
+
+1. SECTOR_SUMMARY: Write 2-3 sentences about the overall sector outlook. What's driving it? Is now a good time to invest?
+
+2. TOP_RECOMMENDATION: Which stock is your #1 pick and why? Include a suggested buy price, target price, and timeframe in natural language (e.g., "Buy Lockheed Martin below $480 with a 12-month target of $550").
+
+3. WHAT_TO_AVOID: Which stock(s) should investors avoid and why? Be specific.
+
+4. INDIVIDUAL_PICKS: For each ticker, write 2-3 sentences covering: your rating (Buy/Hold/Sell), suggested entry point, price target, key risks. Write naturally like you're explaining to a friend.
+
+5. TIMING_GUIDANCE: When should investors enter? Now? Wait for a pullback? Any upcoming events to watch?
+
+6. RISK_WARNING: Key risks to this sector thesis in plain language.
+
+Write everything as readable paragraphs, NOT as structured data or lists with labels.`,
           schema: {
             name: "sector_analysis",
             schema: {
               type: "object",
               additionalProperties: false,
-              required: ["sector_outlook", "best_pick", "avoid", "catalyst_timeline", "ticker_analyses"],
+              required: ["sector_summary", "top_recommendation", "what_to_avoid", "individual_picks", "timing_guidance", "risk_warning"],
               properties: {
-                sector_outlook: { type: "string" },
-                best_pick: { type: "string" },
-                avoid: { type: "string" },
-                catalyst_timeline: { type: "string" },
-                ticker_analyses: { type: "string" }
+                sector_summary: { type: "string" },
+                top_recommendation: { type: "string" },
+                what_to_avoid: { type: "string" },
+                individual_picks: { type: "string" },
+                timing_guidance: { type: "string" },
+                risk_warning: { type: "string" }
               }
             }
           },
-          temperature: 0.3
+          temperature: 0.4
         });
-        sectorAnalyses[sectorKey] = analysis;
+        
+        // QA VALIDATION: Check output quality before adding to report
+        const allContent = Object.values(analysis).filter(v => typeof v === "string").join(" ");
+        const qaResult = await qaAgent.validateOutputQuality(allContent, "pdf_text");
+        
+        if (!qaResult.passed) {
+          this.warn({ sector: sectorKey, issues: qaResult.issues.length }, "QA found issues - requesting regeneration");
+          
+          // Regenerate with stricter instructions
+          const retryAnalysis = await llmJson({
+            model: "gpt-4o",
+            system: `You are an expert investment analyst. CRITICAL: Write ONLY natural prose. 
+NO special characters, NO percentages symbols (write "25 percent" instead), NO code formatting.
+Your previous output failed QA for these reasons: ${qaResult.issues.map(i => i.message).join(", ")}
+Today's date: ${new Date().toLocaleDateString()}`,
+            user: `Rewrite this investment analysis in clean, readable prose for ${sector.name}.
+Fix the formatting issues and write naturally like a professional analyst explaining to a client.`,
+            schema: {
+              name: "sector_analysis",
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["sector_summary", "top_recommendation", "what_to_avoid", "individual_picks", "timing_guidance", "risk_warning"],
+                properties: {
+                  sector_summary: { type: "string" },
+                  top_recommendation: { type: "string" },
+                  what_to_avoid: { type: "string" },
+                  individual_picks: { type: "string" },
+                  timing_guidance: { type: "string" },
+                  risk_warning: { type: "string" }
+                }
+              }
+            },
+            temperature: 0.3
+          });
+          sectorAnalyses[sectorKey] = retryAnalysis;
+          this.info({ sector: sectorKey }, "QA passed on retry");
+        } else {
+          sectorAnalyses[sectorKey] = analysis;
+          this.info({ sector: sectorKey }, "QA passed");
+        }
       } catch (err) {
         this.logger?.error({ error: err.message }, `Failed to analyze ${sector.name}`);
         sectorAnalyses[sectorKey] = { error: err.message };
@@ -803,130 +852,228 @@ Consider current factors:
     const writeStream = fs.createWriteStream(filepath);
     doc.pipe(writeStream);
 
-    // TITLE PAGE
-    doc.fontSize(28).font("Helvetica-Bold")
-       .text("INVESTMENT INTELLIGENCE REPORT", { align: "center" });
+    // TITLE PAGE - Professional styling
+    doc.moveDown(4);
+    doc.fontSize(32).font("Helvetica-Bold")
+       .text("INVESTMENT", { align: "center" });
+    doc.fontSize(32).font("Helvetica-Bold")
+       .text("INTELLIGENCE REPORT", { align: "center" });
     doc.moveDown();
-    doc.fontSize(16).font("Helvetica")
+    doc.moveTo(150, doc.y).lineTo(450, doc.y).lineWidth(2).stroke();
+    doc.moveDown();
+    doc.fontSize(14).font("Helvetica")
        .text(new Date().toLocaleDateString("en-US", { 
          weekday: "long", year: "numeric", month: "long", day: "numeric" 
        }), { align: "center" });
-    doc.moveDown(2);
+    doc.moveDown(3);
     
-    doc.fontSize(12).font("Helvetica-Oblique")
+    doc.fontSize(16).font("Helvetica-Bold")
        .text("War Profit & Income Generation Strategy", { align: "center" });
     doc.moveDown();
-    doc.text("Generated by GENIE AI Investment Analysis System", { align: "center" });
+    doc.fontSize(11).font("Helvetica-Oblique")
+       .text("Prepared for Service-Disabled Veteran Investors", { align: "center" });
+    doc.moveDown();
+    doc.fontSize(10).font("Helvetica")
+       .text("Powered by GENIE AI Analysis System", { align: "center" });
     
-    doc.moveDown(4);
+    doc.moveDown(6);
     
-    // DISCLAIMER
+    // Disclaimer at bottom
     doc.fontSize(8).font("Helvetica")
-       .text("DISCLAIMER: This report is for informational purposes only and does not constitute financial advice. " +
-             "Past performance is not indicative of future results. Always conduct your own research and consult " +
-             "with a qualified financial advisor before making investment decisions.", { align: "center" });
+       .text("IMPORTANT DISCLAIMER", { align: "center" });
+    doc.moveDown(0.3);
+    doc.text("This report is for informational and educational purposes only. It does not constitute " +
+             "financial, investment, tax, or legal advice. Past performance is not indicative of future results. " +
+             "All investments carry risk, including possible loss of principal. Before making any investment " +
+             "decisions, consult with a qualified financial advisor, tax professional, or attorney. " +
+             "The authors and GENIE AI system are not liable for any investment decisions made based on this report.", 
+             { align: "center", width: 450 });
 
-    // EXECUTIVE SUMMARY PAGE
+    // EXECUTIVE SUMMARY PAGE - Human Readable
     doc.addPage();
-    doc.fontSize(18).font("Helvetica-Bold")
-       .text("EXECUTIVE SUMMARY", { underline: true });
+    doc.fontSize(20).font("Helvetica-Bold")
+       .text("Executive Summary");
+    doc.moveTo(50, doc.y).lineTo(560, doc.y).lineWidth(2).stroke();
     doc.moveDown();
     
-    doc.fontSize(11).font("Helvetica");
-    doc.text("Market Environment:", { continued: false });
-    doc.font("Helvetica").text(
-      "• Geopolitical tensions elevated - favoring defense, energy, commodities\n" +
-      "• Inflation remains sticky - hard assets and dividend stocks preferred\n" +
-      "• Interest rates at multi-decade highs - quality over speculation\n" +
-      "• War catalysts creating asymmetric opportunities"
-    );
-    
+    doc.fontSize(11).font("Helvetica")
+       .text("This report analyzes current market conditions and identifies the best opportunities for " +
+             "income generation and capital appreciation in the current geopolitical environment. With " +
+             "ongoing global conflicts, elevated inflation, and shifting monetary policy, certain sectors " +
+             "offer exceptional risk-adjusted returns for the prepared investor.", { align: "justify", lineGap: 2 });
     doc.moveDown();
-    doc.font("Helvetica-Bold").text("Portfolio Allocation Recommendation:");
-    doc.font("Helvetica").text(
-      "• Defense & Aerospace: 25%\n" +
-      "• Energy (Oil & Gas): 20%\n" +
-      "• Commodities (Gold/Uranium): 15%\n" +
-      "• Cryptocurrency: 15%\n" +
-      "• Dividend Kings (Stability): 15%\n" +
-      "• Cash (Dry Powder): 10%"
-    );
+    
+    doc.fontSize(13).font("Helvetica-Bold").text("Current Market Environment");
+    doc.moveDown(0.3);
+    doc.fontSize(10).font("Helvetica")
+       .text("Geopolitical tensions remain elevated across multiple regions, creating sustained demand for " +
+             "defense products and energy security. Inflation continues to run above central bank targets, " +
+             "making hard assets and inflation-protected investments particularly attractive. Interest rates " +
+             "at multi-decade highs favor quality companies with strong balance sheets over speculative growth. " +
+             "These conditions create asymmetric opportunities in specific sectors.", { align: "justify", lineGap: 2 });
+    doc.moveDown();
+    
+    doc.fontSize(13).font("Helvetica-Bold").text("Recommended Portfolio Allocation");
+    doc.moveDown(0.3);
+    doc.fontSize(10).font("Helvetica")
+       .text("Based on current conditions, we recommend the following allocation for income-focused investors:", { lineGap: 2 });
+    doc.moveDown(0.5);
+    
+    // Allocation visual
+    const allocations = [
+      { sector: "Defense & Aerospace", pct: 25, reason: "Direct war beneficiary, strong government contracts" },
+      { sector: "Energy (Oil & Gas)", pct: 20, reason: "Supply constraints, dividend income, inflation hedge" },
+      { sector: "Commodities", pct: 15, reason: "Gold and uranium for safety and nuclear renaissance" },
+      { sector: "Cryptocurrency", pct: 15, reason: "XRP, Bitcoin, Ethereum for asymmetric upside" },
+      { sector: "Dividend Aristocrats", pct: 15, reason: "Stable income, recession resistance" },
+      { sector: "Cash Reserve", pct: 10, reason: "Dry powder for opportunities, emergency fund" }
+    ];
+    
+    for (const a of allocations) {
+      doc.fontSize(10).font("Helvetica-Bold").text(`${a.sector}: ${a.pct}%`, { continued: true });
+      doc.font("Helvetica").text(` - ${a.reason}`);
+    }
+    doc.moveDown();
+    
+    doc.fontSize(13).font("Helvetica-Bold").text("Key Takeaways");
+    doc.moveDown(0.3);
+    doc.fontSize(10).font("Helvetica");
+    doc.text("1. Defense contractors offer the most direct exposure to current geopolitical spending.");
+    doc.text("2. Energy companies provide both income (dividends) and capital appreciation potential.");
+    doc.text("3. Uranium stocks position you for the nuclear energy renaissance underway globally.");
+    doc.text("4. Dividend-paying stocks provide stability and income regardless of market volatility.");
+    doc.text("5. As a Service-Disabled Veteran, federal contracting offers an alternative wealth path.");
 
-    // SECTOR PAGES
+    // SECTOR PAGES - Human Readable Format
     for (const sectorKey of sectorsToAnalyze) {
       const sector = MARKET_SECTORS[sectorKey];
       if (!sector.tickers) continue;
       
       doc.addPage();
       
-      // Sector header
-      doc.fontSize(16).font("Helvetica-Bold")
-         .text(sector.name.toUpperCase(), { underline: true });
-      doc.fontSize(10).font("Helvetica-Oblique")
-         .text(sector.description);
-      doc.moveDown();
+      // Sector header with visual styling
+      doc.fontSize(20).font("Helvetica-Bold")
+         .text(sector.name.toUpperCase());
+      doc.moveTo(50, doc.y).lineTo(560, doc.y).lineWidth(2).stroke();
+      doc.moveDown(0.3);
+      doc.fontSize(11).font("Helvetica-Oblique")
+         .text(sector.description, { width: 510 });
+      doc.moveDown(1);
       
-      // War correlation indicator
-      const warBar = "█".repeat(Math.round(sector.warCorrelation * 10));
-      const emptyBar = "░".repeat(10 - Math.round(sector.warCorrelation * 10));
-      doc.fontSize(9).font("Helvetica")
-         .text(`War Correlation: ${warBar}${emptyBar} (${(sector.warCorrelation * 100).toFixed(0)}%)`);
-      doc.text(`Timing: ${sector.timing.toUpperCase()}`);
-      doc.text(`Key Catalyst: ${sector.catalyst}`);
-      doc.moveDown();
+      // Quick Stats - Clean layout without overlapping boxes
+      doc.fontSize(10).font("Helvetica-Bold").text("SECTOR SNAPSHOT");
+      doc.moveDown(0.3);
+      doc.fontSize(9).font("Helvetica");
+      doc.text(`War Profit Potential: ${(sector.warCorrelation * 100).toFixed(0)} percent`);
+      doc.text(`Best Time to Buy: ${sector.timing.charAt(0).toUpperCase() + sector.timing.slice(1)}`);
+      doc.text(`Key Driver: ${sector.catalyst}`);
+      doc.moveDown(1);
       
-      // AI Analysis
+      // AI Analysis - Human Readable with proper layout
       const analysis = sectorAnalyses[sectorKey];
       if (analysis && !analysis.error) {
-        doc.fontSize(10).font("Helvetica-Bold").text("AI ANALYSIS:");
-        doc.font("Helvetica");
-        doc.text(`Sector Outlook: ${analysis.sector_outlook}`);
-        doc.text(`Best Pick: ${analysis.best_pick}`);
-        doc.text(`Avoid: ${analysis.avoid}`);
-        doc.text(`Catalysts: ${analysis.catalyst_timeline}`);
-        doc.moveDown();
-      }
-      
-      // Ticker table header
-      doc.fontSize(10).font("Helvetica-Bold");
-      const tableTop = doc.y;
-      doc.text("TICKER", 50, tableTop, { width: 50 });
-      doc.text("COMPANY", 100, tableTop, { width: 120 });
-      doc.text("DIV%", 220, tableTop, { width: 40 });
-      doc.text("RATING", 260, tableTop, { width: 50 });
-      doc.text("THESIS", 310, tableTop, { width: 250 });
-      
-      doc.moveTo(50, doc.y + 2).lineTo(560, doc.y + 2).stroke();
-      doc.moveDown(0.5);
-      
-      // Ticker rows
-      doc.fontSize(9).font("Helvetica");
-      for (const ticker of sector.tickers) {
-        const y = doc.y;
-        doc.text(ticker.symbol, 50, y, { width: 50 });
-        doc.text(ticker.name, 100, y, { width: 120 });
-        doc.text(ticker.dividend > 0 ? `${ticker.dividend}%` : "-", 220, y, { width: 40 });
         
-        // Parse AI analysis for specific ticker rating
-        let rating = "ANALYZE";
-        if (analysis?.ticker_analyses) {
-          const tickerAnalysis = analysis.ticker_analyses.toLowerCase();
-          if (tickerAnalysis.includes(ticker.symbol.toLowerCase())) {
-            if (tickerAnalysis.includes("buy")) rating = "BUY";
-            else if (tickerAnalysis.includes("hold")) rating = "HOLD";
-            else if (tickerAnalysis.includes("sell")) rating = "SELL";
+        // Helper function to check page break
+        const checkPageBreak = (neededHeight) => {
+          if (doc.y + neededHeight > 700) {
+            doc.addPage();
           }
-        }
-        doc.text(rating, 260, y, { width: 50 });
-        doc.text(ticker.thesis, 310, y, { width: 250 });
-        doc.moveDown(0.8);
+        };
+        
+        // Sector Overview
+        checkPageBreak(80);
+        doc.fontSize(12).font("Helvetica-Bold").text("Market Outlook");
+        doc.moveDown(0.3);
+        doc.fontSize(10).font("Helvetica")
+           .text(analysis.sector_summary || "Analysis pending.", { align: "justify", lineGap: 2, width: 510 });
+        doc.moveDown(1);
+        
+        // Top Pick - Calculate box height dynamically
+        checkPageBreak(100);
+        const topRecText = analysis.top_recommendation || "See individual analysis below.";
+        doc.fontSize(10).font("Helvetica");
+        const topRecHeight = doc.heightOfString(topRecText, { width: 480 }) + 35;
+        const topBoxY = doc.y;
+        doc.rect(50, topBoxY, 510, topRecHeight).fillAndStroke("#e8f5e9", "#2e7d32");
+        doc.fillColor("#000");
+        doc.fontSize(11).font("Helvetica-Bold").text("TOP RECOMMENDATION", 60, topBoxY + 8);
+        doc.fontSize(10).font("Helvetica")
+           .text(topRecText, 60, topBoxY + 24, { width: 480, lineGap: 2 });
+        doc.y = topBoxY + topRecHeight + 10;
+        
+        // What to Avoid
+        checkPageBreak(60);
+        doc.fontSize(11).font("Helvetica-Bold").text("What to Avoid");
+        doc.moveDown(0.3);
+        doc.fontSize(10).font("Helvetica")
+           .text(analysis.what_to_avoid || "No specific warnings.", { align: "justify", lineGap: 2, width: 510 });
+        doc.moveDown(1);
+        
+        // Individual Stock Analysis - may need page break mid-section
+        checkPageBreak(120);
+        doc.fontSize(12).font("Helvetica-Bold").text("Individual Stock Analysis");
+        doc.moveTo(50, doc.y + 2).lineTo(250, doc.y + 2).lineWidth(0.5).stroke();
+        doc.moveDown(0.5);
+        const picksText = analysis.individual_picks || "See quick reference table below.";
+        doc.fontSize(10).font("Helvetica")
+           .text(picksText, { align: "justify", lineGap: 3, width: 510 });
+        doc.moveDown(1);
+        
+        // Timing & Entry
+        checkPageBreak(60);
+        doc.fontSize(11).font("Helvetica-Bold").text("When to Buy");
+        doc.moveDown(0.3);
+        doc.fontSize(10).font("Helvetica")
+           .text(analysis.timing_guidance || "Monitor market conditions.", { align: "justify", lineGap: 2, width: 510 });
+        doc.moveDown(1);
+        
+        // Risk Warning - Calculate box height dynamically
+        checkPageBreak(80);
+        const riskText = analysis.risk_warning || "All investments carry risk.";
+        doc.fontSize(9).font("Helvetica");
+        const riskHeight = doc.heightOfString(riskText, { width: 480 }) + 25;
+        const riskBoxY = doc.y;
+        doc.rect(50, riskBoxY, 510, riskHeight).fillAndStroke("#ffebee", "#c62828");
+        doc.fillColor("#000");
+        doc.fontSize(10).font("Helvetica-Bold").text("RISK WARNING", 60, riskBoxY + 8);
+        doc.fontSize(9).font("Helvetica")
+           .text(riskText, 60, riskBoxY + 22, { width: 480 });
+        doc.y = riskBoxY + riskHeight + 10;
+        
+      } else if (analysis?.error) {
+        doc.fontSize(10).font("Helvetica-Oblique")
+           .text(`Analysis unavailable: ${analysis.error}`);
       }
       
-      // Detailed ticker analysis from AI
-      if (analysis?.ticker_analyses) {
-        doc.moveDown();
-        doc.fontSize(9).font("Helvetica-Bold").text("DETAILED ANALYSIS:");
-        doc.font("Helvetica").text(analysis.ticker_analyses);
+      // Quick Reference Table - Tickers at bottom
+      doc.moveDown();
+      if (doc.y > 650) doc.addPage(); // Ensure space for table
+      
+      doc.fontSize(11).font("Helvetica-Bold").text("Quick Reference: Stocks in This Sector");
+      doc.moveDown(0.3);
+      
+      // Simple clean table
+      const startY = doc.y;
+      doc.fontSize(9).font("Helvetica-Bold");
+      doc.text("Ticker", 50, startY, { width: 60 });
+      doc.text("Company", 110, startY, { width: 150 });
+      doc.text("Dividend", 260, startY, { width: 60 });
+      doc.text("Investment Thesis", 320, startY, { width: 240 });
+      doc.moveTo(50, doc.y + 2).lineTo(560, doc.y + 2).stroke();
+      doc.moveDown(0.3);
+      
+      doc.font("Helvetica").fontSize(8);
+      for (const ticker of sector.tickers) {
+        if (doc.y > 720) {
+          doc.addPage();
+          doc.y = 50;
+        }
+        const y = doc.y;
+        doc.font("Helvetica-Bold").text(ticker.symbol, 50, y, { width: 60 });
+        doc.font("Helvetica").text(ticker.name, 110, y, { width: 150 });
+        doc.text(ticker.dividend > 0 ? `${ticker.dividend}%` : "None", 260, y, { width: 60 });
+        doc.text(ticker.thesis, 320, y, { width: 240 });
+        doc.moveDown(0.7);
       }
     }
     

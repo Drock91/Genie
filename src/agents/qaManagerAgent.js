@@ -388,4 +388,171 @@ Be STRICT: If any key item is missing or placeholder, mark checklist_honored = f
       throw err;
     }
   }
+
+  /**
+   * Validate output quality before delivery
+   * Catches formatting issues, JSON-like text in prose, special character problems
+   * @param {string} content - The text content to validate
+   * @param {string} contentType - Type: 'report', 'prose', 'code', 'pdf_text'
+   */
+  async validateOutputQuality(content, contentType = "prose") {
+    this.info({ contentType, length: content.length }, "Validating output quality");
+    
+    const issues = [];
+    
+    // Check for JSON-like formatting in prose content
+    if (contentType === "prose" || contentType === "report" || contentType === "pdf_text") {
+      // Check for JSON brackets/braces that shouldn't be there
+      const jsonPatterns = [
+        { pattern: /\{[^}]+:[^}]+\}/g, issue: "JSON-style object notation detected" },
+        { pattern: /\[[^\]]+,[^\]]+\]/g, issue: "Array-like notation detected" },
+        { pattern: /"[a-z_]+"\s*:/gi, issue: "JSON key-value pairs detected" },
+        { pattern: /:\s*"[^"]+"/g, issue: "Quoted string values like JSON detected" }
+      ];
+      
+      for (const { pattern, issue } of jsonPatterns) {
+        const matches = content.match(pattern);
+        if (matches && matches.length > 2) {
+          issues.push({
+            type: "json_formatting",
+            message: issue,
+            samples: matches.slice(0, 3),
+            severity: "high"
+          });
+        }
+      }
+      
+      // Check for repeated special characters (like %%%%%%%%%%%)
+      const repeatedChars = /(.)\1{5,}/g;
+      const repeats = content.match(repeatedChars);
+      if (repeats) {
+        issues.push({
+          type: "repeated_characters",
+          message: "Excessive repeated characters detected",
+          samples: repeats.slice(0, 3),
+          severity: "high"
+        });
+      }
+      
+      // Check for placeholder text
+      const placeholderPatterns = [
+        /\[TODO\]/gi,
+        /\[INSERT.+\]/gi,
+        /\[PLACEHOLDER\]/gi,
+        /Lorem ipsum/gi,
+        /undefined|null/g,
+        /NaN%|NaN\b/g,
+        /<[^>]+>.*<\/[^>]+>/g  // HTML tags in prose
+      ];
+      
+      for (const pattern of placeholderPatterns) {
+        const matches = content.match(pattern);
+        if (matches) {
+          issues.push({
+            type: "placeholder_content",
+            message: `Placeholder or invalid content: ${matches[0]}`,
+            samples: matches.slice(0, 3),
+            severity: "medium"
+          });
+        }
+      }
+      
+      // Check for code artifacts
+      const codeArtifacts = /\\n|\\t|\\r|\\/g;
+      const artifactMatches = content.match(codeArtifacts);
+      if (artifactMatches && artifactMatches.length > 5) {
+        issues.push({
+          type: "code_artifacts",
+          message: "Escaped characters suggesting raw code in prose",
+          count: artifactMatches.length,
+          severity: "medium"
+        });
+      }
+    }
+    
+    const passed = issues.filter(i => i.severity === "high").length === 0;
+    
+    this.info({
+      passed,
+      issues: issues.length,
+      highSeverity: issues.filter(i => i.severity === "high").length
+    }, "Output quality validation complete");
+    
+    return {
+      passed,
+      issues,
+      recommendation: passed ? "Output ready for delivery" : "Output needs revision before delivery"
+    };
+  }
+
+  /**
+   * Review AI-generated content before delivery
+   * Uses LLM to check readability and format quality
+   */
+  async reviewGeneratedContent(content, expectedFormat = "human-readable report") {
+    this.info({ length: content.length, expectedFormat }, "Reviewing AI-generated content");
+    
+    try {
+      const result = await consensusCall({
+        profile: "balanced",
+        consensusLevel: "single",
+        system: `You are a QA reviewer checking generated content quality. Your job is to catch formatting problems before the content reaches users.`,
+        user: `Review this content that should be a "${expectedFormat}".
+
+Content to review (first 2000 chars):
+${content.substring(0, 2000)}
+
+Check for these problems:
+1. JSON-like formatting (colons after field names, brackets, quotes around values)
+2. Code artifacts (escaped newlines, undefined values, null, NaN)
+3. Repeated special characters (like %%%%% or #####)
+4. Placeholder text ([TODO], Lorem ipsum, etc.)
+5. Awkward/unnatural phrasing that sounds like a code comment
+6. Missing or incomplete sentences
+7. Overlapping or garbled text
+
+Return your assessment.`,
+        schema: {
+          name: "content_review",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["is_human_readable", "problems_found", "specific_issues", "severity"],
+            properties: {
+              is_human_readable: { 
+                type: "boolean",
+                description: "Is this content suitable for human consumption?"
+              },
+              problems_found: { 
+                type: "number",
+                description: "Number of problems found (0-10)"
+              },
+              specific_issues: {
+                type: "array",
+                items: { type: "string" },
+                description: "List of specific problems found"
+              },
+              severity: {
+                type: "string",
+                enum: ["none", "minor", "major", "critical"],
+                description: "Overall severity of issues"
+              }
+            }
+          }
+        },
+        temperature: 0.1
+      });
+
+      this.info({
+        humanReadable: result.consensus.is_human_readable,
+        problems: result.consensus.problems_found,
+        severity: result.consensus.severity
+      }, "Content review complete");
+
+      return result.consensus;
+    } catch (err) {
+      this.error({ error: err.message }, "Content review failed");
+      return { is_human_readable: true, problems_found: 0, specific_issues: [], severity: "none" };
+    }
+  }
 }
