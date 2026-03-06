@@ -13,6 +13,10 @@
     "generate-project": "node src/repo/projectGeneratorDemo.js",
     "refiner-demo": "node src/refinerDemo.js",
     "intel": "node ask-intel.js",
+    "report": "node generate-report.js",
+    "report:war": "node generate-report.js --war",
+    "report:income": "node generate-report.js --income",
+    "report:crypto": "node generate-report.js --crypto",
     "test": "node --test src/**/*.test.js",
     "lint": "eslint src/",
     "logs": "tail -f logs/*.log"
