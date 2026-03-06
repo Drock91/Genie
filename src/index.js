@@ -33,6 +33,7 @@ import { DeploymentAgent } from "./agents/deploymentAgent.js";
 import { TestGenerationAgent } from "./agents/testGenerationAgent.js";
 import { APIDocumentationAgent } from "./agents/apiDocumentationAgent.js";
 import { PerformanceOptimizationAgent } from "./agents/performanceOptimizationAgent.js";
+import { NewsAnalysisAgent } from "./agents/newsAnalysisAgent.js";
 import { getConfig } from "./util/config.js";
 import { initializeMultiLlm } from "./llm/multiLlmSystem.js";
 import { generateAgentSummaryReport, generateRequestSerial } from "./util/agentSummaryGenerator.js";
