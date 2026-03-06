@@ -391,6 +391,176 @@ Determine:
   }
 
   /**
+   * ASK - Simple query interface for investment intelligence
+   * The main method most users will use - just ask a question, get unbiased intel
+   * 
+   * @param {string} query - What you want to know (e.g., "what's happening with XRP", "should I buy ETH")
+   * @param {Object} options - Optional config
+   * @returns {Promise<Object>} Investment intelligence response
+   */
+  async ask(query, options = {}) {
+    this.info({}, `Investment intel query: ${query}`);
+
+    try {
+      const result = await llmJson({
+        model: "gpt-4o",
+        system: `You are an unbiased investment intelligence analyst. Your job is to cut through propaganda, hype, and noise to provide actionable investment insights.
+
+CORE PRINCIPLES:
+1. NO HYPE - If something sounds too good, it probably is
+2. CONTRARIAN AWARENESS - When everyone is bullish, look for bear signals and vice versa
+3. JIM CRAMER INDICATOR - Track what mainstream pundits say and consider the opposite
+4. FOLLOW THE MONEY - Who benefits from each narrative?
+5. INSTITUTIONAL VS RETAIL - What are smart money actually doing (not saying)?
+6. TIME HORIZONS - Distinguish short-term noise from long-term trends
+
+BLOCKCHAIN EXPERTISE:
+- XRPL: Cross-border payments, CBDC infrastructure, Ripple partnerships, ODL volumes
+- Bitcoin: Store of value thesis, ETF flows, nation-state adoption, halving cycles
+- Ethereum: DeFi, NFTs, Layer 2 scaling, enterprise tokenization
+- Chainlink: Oracle monopoly, SWIFT integration, CCIP cross-chain
+- Solana: High throughput, retail activity, VC backing concerns
+
+ANTI-PATTERNS TO FLAG:
+- Media pump before insider dump
+- "This time is different" narratives
+- Retail FOMO signals (Google trends, social volume)
+- Regulatory FUD timed with accumulation
+- Celebrity endorsements
+
+Be direct. No hedging. Give actual investment thesis, not "it depends."`,
+        user: `QUERY: ${query}
+
+Analyze this from an investment perspective and provide:
+1. quick_take - 2-3 sentence direct answer
+2. bull_case - Why it could go up (with probability estimate)
+3. bear_case - Why it could go down (with probability estimate)  
+4. contrarian_signal - What does the opposite of consensus suggest?
+5. jim_cramer_check - What are mainstream pundits saying? (and why to be skeptical)
+6. smart_money - What are institutions actually doing?
+7. chains_affected - Which blockchains benefit/suffer
+8. action - Specific actionable recommendation (buy/sell/hold/wait with reasoning)
+9. time_horizon - When this thesis plays out
+10. confidence - Your confidence level 1-10 with reasoning`,
+        schema: {
+          name: "investment_intel",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["quick_take", "bull_case", "bear_case", "contrarian_signal", "jim_cramer_check", "smart_money", "chains_affected", "action", "time_horizon", "confidence"],
+            properties: {
+              quick_take: { type: "string" },
+              bull_case: { type: "string" },
+              bear_case: { type: "string" },
+              contrarian_signal: { type: "string" },
+              jim_cramer_check: { type: "string" },
+              smart_money: { type: "string" },
+              chains_affected: { type: "array", items: { type: "string" } },
+              action: { type: "string" },
+              time_horizon: { type: "string" },
+              confidence: { type: "string" }
+            }
+          }
+        },
+        temperature: 0.3
+      });
+
+      return {
+        success: true,
+        query,
+        intel: result,
+        timestamp: new Date().toISOString(),
+        disclaimer: "Not financial advice. Do your own research."
+      };
+    } catch (err) {
+      this.logger?.error({ error: err.message }, "Investment intel query failed");
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Quick sentiment check on a topic
+   */
+  async sentiment(topic) {
+    try {
+      const result = await llmJson({
+        model: "gpt-4o",
+        system: "You analyze market sentiment across multiple sources. Be contrarian-aware.",
+        user: `Quick sentiment analysis for: ${topic}
+
+Provide:
+- overall: bullish/bearish/neutral with percentage
+- retail_sentiment: What retail is saying
+- institutional_sentiment: What institutions are doing
+- contrarian_play: What the opposite bet would be
+- warning_signs: Red flags to watch`,
+        schema: {
+          name: "sentiment",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["overall", "retail_sentiment", "institutional_sentiment", "contrarian_play", "warning_signs"],
+            properties: {
+              overall: { type: "string" },
+              retail_sentiment: { type: "string" },
+              institutional_sentiment: { type: "string" },
+              contrarian_play: { type: "string" },
+              warning_signs: { type: "array", items: { type: "string" } }
+            }
+          }
+        },
+        temperature: 0.2
+      });
+      return { success: true, sentiment: result };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Check if something is being "Jim Cramered" (hyped by mainstream before dump)
+   */
+  async cramerCheck(asset) {
+    try {
+      const result = await llmJson({
+        model: "gpt-4o",
+        system: `You track the "Jim Cramer indicator" - when mainstream financial media pumps something, it often precedes a dump. 
+This isn't about Jim Cramer specifically, but the pattern of retail-targeted hype preceding insider exits.
+Also track: CNBC pump, Bloomberg coverage increases, celebrity endorsements, "to the moon" social spikes.`,
+        user: `Cramer Check for: ${asset}
+
+Analyze:
+- mainstream_hype_level: 1-10 (10 = extremely hyped)
+- recent_pump_signals: Any recent mainstream recommendations to buy?
+- insider_activity: Are insiders selling while recommending?
+- retail_fomo_indicators: Google trends, social volume, etc.
+- inverse_signal: What does betting against the hype suggest?
+- recommendation: Based on contrarian analysis`,
+        schema: {
+          name: "cramer_check",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["mainstream_hype_level", "recent_pump_signals", "insider_activity", "retail_fomo_indicators", "inverse_signal", "recommendation"],
+            properties: {
+              mainstream_hype_level: { type: "string" },
+              recent_pump_signals: { type: "array", items: { type: "string" } },
+              insider_activity: { type: "string" },
+              retail_fomo_indicators: { type: "string" },
+              inverse_signal: { type: "string" },
+              recommendation: { type: "string" }
+            }
+          }
+        },
+        temperature: 0.2
+      });
+      return { success: true, cramerCheck: result };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
    * Get configured sources
    */
   getSources() {
