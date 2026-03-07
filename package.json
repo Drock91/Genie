@@ -8,6 +8,8 @@
     "setup": "node setup.js",
     "quickstart": "node quickstart.js",
     "verify": "node verify-genie-system.js",
+    "contracts": "node contract-opportunities.js",
+    "contracts:search": "node sam-contract-search.js",
     "start": "node src/index.js",
     "research": "node src/index.js --research-only",
     "dev": "node --watch src/index.js",
