@@ -1,6 +1,6 @@
 # GENIE: Fully Operational AI Company Platform
 
-**A complete, enterprise-grade AI system with 35 specialized agents across all business departments. Extensible multi-LLM consensus system supporting 5 providers (OpenAI, Anthropic, Google, Mistral, AI21) for unprecedented accuracy and scalability.**
+**A complete, enterprise-grade AI system with 46 specialized agents across all business departments. Extensible multi-LLM consensus system supporting 5 providers (OpenAI, Anthropic, Google, Mistral, AI21) for unprecedented accuracy and scalability.**
 
 ## 🏢 System Overview
 
@@ -10,6 +10,9 @@ GENIE is a fully operational AI company that can:
 - ✅ **Manage operations** (recruiting, finance, compliance, payroll)
 - ✅ **Execute strategy** (marketing, product, research, sales)
 - ✅ **Ensure quality** (QA, security, testing, architecture)
+- ✅ **Generate income** (contracts, grants, freelancing, business opportunities)
+- ✅ **Research & analyze** (market research, competitive analysis, trends)
+- ✅ **Browse the web** (search engines, websites, scraping, form interaction)
 
 Think of it as having an entire C-suite + department heads + specialists accessible via simple text requests.
 
@@ -67,7 +70,18 @@ Think of it as having an entire C-suite + department heads + specialists accessi
 - **Delivery Manager** - Project assembly, deliverables management
 - **Writer** - Documentation, README files, technical content
 
-**Total: 35 specialist agents, each with multi-LLM consensus for maximum accuracy**
+### 💰 **Income & Business Intelligence** (3 agents)
+- **Income Generation** - Finds income opportunities (contracts, grants, freelancing)
+- **Tax Strategy** - Tax optimization, deductions, business structuring
+- **News Analysis** - Market trends, news monitoring, opportunity detection
+
+### 🌐 **Autonomous Operations** (4 agents)
+- **Web Browser** - LLM-guided web browsing, searching, scraping any website
+- **Task Analyzer** - Intelligent task classification and optimal routing
+- **Task Completion Verifier** - Validates output quality and completion
+- **Research Agent** - Deep research with multi-source aggregation
+
+**Total: 46 specialist agents, each with multi-LLM consensus for maximum accuracy**
 
 ---
 

@@ -32,8 +32,16 @@ Your job:
 5. Clarify ambiguous requirements
 6. Structure the request for maximum clarity
 
-Keep the user's core intent but make it crystal clear and complete.`,
-        user: `Refine this user request to make it more precise and actionable:\n\n"${rawInput}"`,
+CRITICAL RULES:
+- PRESERVE ALL SPECIFIC DETAILS from the original request (prices, colors, names, features, numbers)
+- If the user provides specific values ($15, navy blue, 9am-5pm), keep them EXACTLY
+- DO NOT summarize or condense - EXPAND and ADD details
+- The refined request should be LONGER than the original, not shorter
+- Include ALL features, requirements, and specifications mentioned
+- Never replace specific details with generic descriptions
+
+Keep the user's core intent AND all their specific requirements.`,
+        user: `Refine this user request to make it more precise and actionable. PRESERVE ALL SPECIFIC DETAILS (prices, colors, names, features, etc.):\n\n"${rawInput}"`,
         schema: {
           name: "refined_request",
           schema: {

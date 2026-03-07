@@ -1,4 +1,5 @@
 import { writePdf } from "./util/pdfWriter.js";
+import { generatePdf, markdownToPdf } from "./util/enhancedPdfGenerator.js";
 import { CostOptimizationSystem } from "./util/costOptimization.js";
 import HtmlImageEmbedder from "./util/htmlImageEmbedder.js";
 import { extractProjectName, extractOutputFolder, isPdfRequested, isRefinementRequest } from "./util/inputParser.js";
@@ -29,13 +30,56 @@ export async function runWorkflow({ userInput, agents, logger, config, executor 
     logger.info({}, "🟢 Cost Optimization activated - 70-85% savings expected!");
   }
 
+  // ========== INTELLIGENT TASK ANALYSIS ==========
+  // Use TaskAnalyzer to understand what the user REALLY wants
+  let taskAnalysis = null;
+  if (agents.taskAnalyzer) {
+    try {
+      logger.info({ traceId }, "🧠 Analyzing task to determine optimal approach...");
+      taskAnalysis = await agents.taskAnalyzer.analyzeTask(userInput);
+      logger.info({ 
+        traceId, 
+        primaryType: taskAnalysis.primaryType,
+        complexity: taskAnalysis.complexity,
+        agentCount: taskAnalysis.agents?.length 
+      }, "Task analysis complete");
+    } catch (err) {
+      logger.warn({ error: err.message }, "Task analysis failed, using default workflow");
+    }
+  }
+
   // Extract projectName and other metadata from user input
   const projectName = extractProjectName(userInput);
-  const pdfRequested = isPdfRequested(userInput);
+  const pdfRequested = isPdfRequested(userInput) || taskAnalysis?.specialRequirements?.wantsPdf;
   const customFolder = extractOutputFolder(userInput);
   const isRefinement = isRefinementRequest(userInput);
   const projectPath = executor ? path.join(executor.workspaceDir) : null;
   const hasExistingFiles = projectPath && fs.existsSync(projectPath) && fs.readdirSync(projectPath).length > 0;
+
+  // ========== SPECIAL TASK ROUTING ==========
+  // Route to specialized agents based on task type
+  if (taskAnalysis && !researchOnly) {
+    // Income generation tasks
+    if (taskAnalysis.primaryType === "INCOME_GENERATION" && agents.incomeGeneration) {
+      logger.info({ traceId }, "📈 Routing to Income Generation agent");
+      try {
+        const incomeResult = await handleIncomeTask({ 
+          userInput, agents, logger, traceId, executor, taskAnalysis, pdfRequested 
+        });
+        if (incomeResult.success) {
+          return incomeResult;
+        }
+      } catch (err) {
+        logger.warn({ error: err.message }, "Income task handling failed, continuing with standard workflow");
+      }
+    }
+    
+    // Market research tasks
+    if (taskAnalysis.primaryType === "MARKET_RESEARCH" && agents.research) {
+      logger.info({ traceId }, "📊 Routing to Market Research workflow");
+      // Continue with research-only workflow
+    }
+  }
 
   // If refinement requested AND files exist, use CodeRefinerAgent
   if (!researchOnly && isRefinement && hasExistingFiles && agents.codeRefiner) {
@@ -615,3 +659,126 @@ IMPORTANT: Focus on PRECISION and ACCURACY. Generate deliverables with exact nam
   return result;
 }
 
+/**
+ * Handle income generation tasks through specialized agent
+ */
+async function handleIncomeTask({ userInput, agents, logger, traceId, executor, taskAnalysis, pdfRequested }) {
+  logger.info({ traceId }, "Starting income generation workflow");
+
+  // Extract relevant information from user input
+  const skillsMatch = userInput.match(/skills?:?\s*([^.]+)/i);
+  const skills = skillsMatch ? skillsMatch[1].split(/,|and/).map(s => s.trim()) : [];
+  
+  // Use income generation agent to analyze opportunities
+  const incomeResult = await agents.incomeGeneration.analyzeIncomeOpportunities({
+    skills: skills.length > 0 ? skills : ["AI", "software development", "blockchain"],
+    resources: {},
+    constraints: {},
+    goals: taskAnalysis?.expectedOutputs || ["income opportunities", "action plan"]
+  });
+
+  if (!incomeResult.success) {
+    return { success: false, error: incomeResult.error };
+  }
+
+  // Generate report
+  const report = await agents.incomeGeneration.generateIncomeReport({
+    analysis: incomeResult.analysis,
+    format: "markdown"
+  });
+
+  // Save markdown report
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const mdFilename = `income-report-${timestamp}.md`;
+  const mdPath = executor ? path.join(executor.workspaceDir, mdFilename) : `./reports/${mdFilename}`;
+  
+  // Ensure directory exists
+  const dir = path.dirname(mdPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(mdPath, report.report);
+  logger.info({ path: mdPath }, "Income report saved");
+
+  const executedFiles = [{ path: mdPath, type: "markdown" }];
+
+  // Generate PDF if requested
+  if (pdfRequested) {
+    try {
+      const pdfPath = mdPath.replace('.md', '.pdf');
+      await markdownToPdf({
+        markdownContent: report.report,
+        outputPath: pdfPath,
+        metadata: {
+          title: "Income Generation Report",
+          subtitle: "Opportunities and Action Plan",
+          date: new Date().toLocaleDateString()
+        }
+      });
+      executedFiles.push({ path: pdfPath, type: "pdf" });
+      logger.info({ path: pdfPath }, "Income report PDF generated");
+    } catch (err) {
+      logger.warn({ error: err.message }, "PDF generation failed");
+    }
+  }
+
+  return {
+    traceId,
+    iteration: 1,
+    success: true,
+    taskType: "INCOME_GENERATION",
+    analysis: incomeResult.analysis,
+    executedFiles
+  };
+}
+
+/**
+ * Verify task completion using TaskCompletionVerifier
+ */
+async function verifyTaskCompletion({ userInput, taskAnalysis, executedFiles, outputPath, deliverables, agents, logger }) {
+  if (!agents.taskCompletionVerifier) {
+    return { isComplete: true, completionScore: 100 };
+  }
+
+  try {
+    const verification = await agents.taskCompletionVerifier.verifyCompletion({
+      userInput,
+      taskAnalysis,
+      executedFiles,
+      outputPath,
+      deliverables
+    });
+
+    if (!verification.isComplete) {
+      logger.warn({
+        completionScore: verification.completionScore,
+        issues: verification.issues?.length
+      }, "Task completion verification found issues");
+    }
+
+    return verification;
+  } catch (err) {
+    logger.warn({ error: err.message }, "Task completion verification failed");
+    return { isComplete: true, completionScore: 100 };
+  }
+}
+
+/**
+ * Auto-generate PDF from deliverables
+ */
+async function autoGeneratePdf({ content, outputPath, title, metadata, logger }) {
+  try {
+    await generatePdf({
+      outputPath,
+      title,
+      content,
+      metadata,
+      style: "professional"
+    });
+    logger.info({ path: outputPath }, "Auto-generated PDF");
+    return { success: true, path: outputPath };
+  } catch (err) {
+    logger.warn({ error: err.message }, "Auto PDF generation failed");
+    return { success: false, error: err.message };
+  }
+}

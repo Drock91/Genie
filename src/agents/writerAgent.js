@@ -9,11 +9,22 @@ export class WriterAgent extends BaseAgent {
   }
 
   async build({ plan, traceId, iteration, userInput = "", researchOnly = false, suppressPatches = false }) {
-    this.info({ traceId, iteration }, "Producing textual response with multi-LLM consensus");
+    this.info({ traceId, iteration, researchOnly }, "Producing textual response with multi-LLM consensus");
 
     try {
-      const shouldSuppressPatches = Boolean(researchOnly || suppressPatches);
-      const outputPath = this._resolveOutputPath(plan, userInput);
+      // In research mode, we DO want to create files (to reports folder)
+      // Only suppress patches if explicitly requested via suppressPatches
+      const shouldSuppressPatches = Boolean(suppressPatches);
+      
+      // For research mode, generate a timestamped report filename
+      let outputPath;
+      if (researchOnly) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        outputPath = `research-report-${timestamp}.md`;
+      } else {
+        outputPath = this._resolveOutputPath(plan, userInput);
+      }
+      
       const explicitContent = this._extractExplicitContent(userInput);
 
       if (outputPath && explicitContent) {

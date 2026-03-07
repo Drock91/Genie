@@ -1,5 +1,7 @@
 console.log("Super Agent System Booting...");
 import "dotenv/config";
+import fs from 'fs';
+import path from 'path';
 import { logger } from "./util/logger.js";
 import { runWorkflow } from "./workflow.js";
 import { CostOptimizationSystem } from "./util/costOptimization.js";
@@ -35,6 +37,11 @@ import { APIDocumentationAgent } from "./agents/apiDocumentationAgent.js";
 import { PerformanceOptimizationAgent } from "./agents/performanceOptimizationAgent.js";
 import { NewsAnalysisAgent } from "./agents/newsAnalysisAgent.js";
 import { TaxStrategyAgent } from "./agents/taxStrategyAgent.js";
+import { TaskAnalyzerAgent } from "./agents/taskAnalyzerAgent.js";
+import { IncomeGenerationAgent } from "./agents/incomeGenerationAgent.js";
+import { TaskCompletionVerifierAgent } from "./agents/taskCompletionVerifierAgent.js";
+import { ResearchAgent } from "./agents/researchAgent.js";
+import { DataAnalystAgent } from "./agents/dataAnalystAgent.js";
 import { getConfig } from "./util/config.js";
 import { initializeMultiLlm } from "./llm/multiLlmSystem.js";
 import { generateAgentSummaryReport, generateRequestSerial } from "./util/agentSummaryGenerator.js";
@@ -60,7 +67,22 @@ if (!validation.valid) {
   process.exit(1);
 }
 
-const userInput = parsed.input;
+// Read input from file or command line
+let userInput = parsed.input;
+if (parsed.file) {
+  try {
+    const filePath = path.resolve(parsed.file);
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    const requestData = JSON.parse(fileContent);
+    userInput = requestData.input || requestData.request || '';
+    console.log(`📄 Loaded request from file: ${parsed.file}`);
+    console.log(`📝 Request length: ${userInput.length} characters`);
+  } catch (err) {
+    logger.error({ error: err.message }, `Failed to read request file: ${parsed.file}`);
+    process.exit(1);
+  }
+}
+
 const interactiveMode = parsed.interactive;
 const researchOnly = parsed.researchOnly;
 const powerLevel = parsed.power;
@@ -114,17 +136,35 @@ const ORIGINAL_INPUT = userInput;
       // === INVESTMENT & TAX AGENTS ===
       newsAnalysis: new NewsAnalysisAgent({ logger }),
       taxStrategy: new TaxStrategyAgent({ logger }),
+      // === INTELLIGENT TASK MANAGEMENT ===
+      taskAnalyzer: new TaskAnalyzerAgent({ logger }),
+      incomeGeneration: new IncomeGenerationAgent({ logger }),
+      taskCompletionVerifier: new TaskCompletionVerifierAgent({ logger }),
+      // === RESEARCH & ANALYSIS ===
+      research: new ResearchAgent(logger, global.multiLlmSystem),
+      dataAnalyst: new DataAnalystAgent(logger, global.multiLlmSystem),
     }
 
     // Extract project name and use as subfolder in output
     const outputFolder = extractOutputFolder(userInput);
     const projectName = outputFolder ? outputFolder.split("/")[0] : extractProjectName(userInput);
-    const executor = new PatchExecutor({ workspaceDir: "./output", projectName, logger });
+    
+    // For research-only mode, use reports folder instead of creating empty output folders
+    const executor = researchOnly 
+      ? new PatchExecutor({ workspaceDir: "./reports", projectName: null, logger })
+      : new PatchExecutor({ workspaceDir: "./output", projectName, logger });
+    
     const store = new RequestStore({ storageDir: "./requests", logger });
     const inspector = new AgentInspector({ logger });
     const metricsCollector = new MetricsCollector({ logger });
     const llmUsageTracker = new LLMUsageTracker({ logger });
     const reporter = new WorkflowReporter({ inspector, metricsCollector, logger });
+
+    // Store original request in tracker for reporting
+    llmUsageTracker.setOriginalRequest(ORIGINAL_INPUT);
+    
+    // Make tracker globally available for providers to record rate limits
+    global.llmUsageTracker = llmUsageTracker;
 
     // Health check before running
     const health = reporter.generateHealthReport(agents);
@@ -176,6 +216,7 @@ const ORIGINAL_INPUT = userInput;
       if (refinementResult.confidence >= 70) {
         finalInput = refinementResult.refined;
         REFINED_INPUT = refinementResult.refined;  // Capture the refined version
+        llmUsageTracker.setRefinedRequest(refinementResult.refined);  // Track for reporting
         logger.info({ 
           original: userInput, 
           refined: finalInput, 

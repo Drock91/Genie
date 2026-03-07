@@ -84,17 +84,28 @@ export class FrontendCoderAgent extends BaseAgent {
         profile: "balanced",
         consensusLevel,
         system: `You are an expert frontend developer. Generate complete, working HTML5/CSS3/JavaScript code.
-      Use app.js as the JavaScript filename and reference it from the HTML.
-      Implement real, working functionality for catalog, cart, subscriptions, and admin dashboard interactions.
-      Include a product data model in app.js and wire UI events for add/remove, filters, and totals.
-      Reference product images under img/ using: img/coffee-1.jpg ... img/coffee-6.jpg.
-      CRITICAL: Return ONLY valid JSON with these exact keys: {"html": "...", "css": "...", "js": "..."}
-      Do NOT include markdown, code fences, or any text outside the JSON object.`,
-        user: `Generate code for: ${userInput}
+      
+CRITICAL REQUIREMENTS:
+- Generate code that EXACTLY matches the user's specifications
+- If the user specifies colors (navy blue, gold, etc.), use THOSE EXACT colors
+- If the user specifies pricing, include THOSE EXACT prices
+- If the user specifies a business name, use THAT EXACT name
+- If the user specifies features (booking, payment, calculator), implement ALL of them
+- Include ALL sections, forms, and functionality explicitly mentioned
+- Use app.js as the JavaScript filename and reference it from the HTML
+- Make all interactive elements fully functional with real JavaScript
+- Be thorough - include every feature the user asked for
+- NEVER substitute generic content when specific content is provided
+
+RETURN FORMAT:
+Return ONLY valid JSON with these exact keys: {"html": "...", "css": "...", "js": "..."}
+Do NOT include markdown, code fences, or any text outside the JSON object.`,
+        user: `Generate COMPLETE code for this EXACT specification: ${userInput}
 
 Work items:
 ${workItems.map(w => `- ${w.task || w.title || w.id}`).join('\n')}
 
+IMPORTANT: Include ALL features, pricing, colors, and details mentioned above. Do not skip or simplify any requirements.
 Return as JSON object with html, css, js properties. Code must be complete and runnable.`,
         temperature: 0.3
       });

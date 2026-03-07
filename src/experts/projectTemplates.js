@@ -141,6 +141,126 @@ export const PROJECT_TEMPLATES = {
       legal: false,
       consensusLevel: "consensus"
     }
+  },
+
+  // ========== RESEARCH & ANALYSIS TEMPLATES ==========
+  
+  "research-report": {
+    description: "Comprehensive research report with analysis",
+    requiredFiles: {
+      reports: [
+        { name: "research-report.md", type: "file", required: true, description: "Main research findings" },
+        { name: "research-report.pdf", type: "file", required: false, description: "PDF version of report" }
+      ],
+      data: [
+        { name: "sources.json", type: "file", required: false, description: "Source references" }
+      ]
+    },
+    agentsNeeded: {
+      security: false,
+      qa: false,
+      legal: false,
+      consensusLevel: "consensus"
+    }
+  },
+
+  "market-research": {
+    description: "Market analysis and competitive intelligence",
+    requiredFiles: {
+      reports: [
+        { name: "market-analysis.md", type: "file", required: true, description: "Market overview and trends" },
+        { name: "competitor-analysis.md", type: "file", required: true, description: "Competitor breakdown" },
+        { name: "market-analysis.pdf", type: "file", required: false, description: "PDF version" }
+      ],
+      data: [
+        { name: "market-data.json", type: "file", required: false, description: "Raw market data" }
+      ]
+    },
+    agentsNeeded: {
+      security: false,
+      qa: true,
+      legal: false,
+      consensusLevel: "consensus"
+    }
+  },
+
+  // ========== INCOME & BUSINESS TEMPLATES ==========
+
+  "income-plan": {
+    description: "Income generation strategy and action plan",
+    requiredFiles: {
+      reports: [
+        { name: "income-strategy.md", type: "file", required: true, description: "Income opportunities analysis" },
+        { name: "action-plan.md", type: "file", required: true, description: "Prioritized action steps" },
+        { name: "income-plan.pdf", type: "file", required: false, description: "PDF version" }
+      ],
+      data: [
+        { name: "opportunities.json", type: "file", required: false, description: "Opportunity details" }
+      ]
+    },
+    agentsNeeded: {
+      security: false,
+      qa: true,
+      legal: false,
+      consensusLevel: "consensus"
+    }
+  },
+
+  "business-plan": {
+    description: "Comprehensive business plan",
+    requiredFiles: {
+      reports: [
+        { name: "business-plan.md", type: "file", required: true, description: "Full business plan" },
+        { name: "executive-summary.md", type: "file", required: true, description: "One-page summary" },
+        { name: "financial-projections.md", type: "file", required: true, description: "Revenue/cost projections" },
+        { name: "business-plan.pdf", type: "file", required: false, description: "PDF version" }
+      ],
+      data: [
+        { name: "financials.json", type: "file", required: false, description: "Financial model data" }
+      ]
+    },
+    agentsNeeded: {
+      security: false,
+      qa: true,
+      legal: true,
+      consensusLevel: "consensus"
+    }
+  },
+
+  "grant-proposal": {
+    description: "Grant or funding proposal",
+    requiredFiles: {
+      reports: [
+        { name: "proposal.md", type: "file", required: true, description: "Main proposal document" },
+        { name: "budget.md", type: "file", required: true, description: "Budget breakdown" },
+        { name: "timeline.md", type: "file", required: true, description: "Project timeline" },
+        { name: "proposal.pdf", type: "file", required: false, description: "PDF for submission" }
+      ]
+    },
+    agentsNeeded: {
+      security: false,
+      qa: true,
+      legal: true,
+      consensusLevel: "consensus"
+    }
+  },
+
+  "contract-proposal": {
+    description: "Government or commercial contract proposal",
+    requiredFiles: {
+      reports: [
+        { name: "technical-approach.md", type: "file", required: true, description: "Technical solution" },
+        { name: "past-performance.md", type: "file", required: true, description: "Relevant experience" },
+        { name: "pricing.md", type: "file", required: true, description: "Cost breakdown" },
+        { name: "proposal.pdf", type: "file", required: false, description: "Complete proposal PDF" }
+      ]
+    },
+    agentsNeeded: {
+      security: true,
+      qa: true,
+      legal: true,
+      consensusLevel: "consensus"
+    }
   }
 };
 

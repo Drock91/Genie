@@ -1,6 +1,7 @@
 /**
  * LLM Usage Tracker
  * Detailed tracking of all LLM calls, costs, providers, and usage patterns
+ * Includes rate limit detection and error tracking
  */
 
 export class LLMUsageTracker {
@@ -8,9 +9,11 @@ export class LLMUsageTracker {
     this.logger = logger;
     this.calls = [];
     this.providerStats = {
-      openai: { calls: 0, tokens: 0, cost: 0, models: {} },
-      anthropic: { calls: 0, tokens: 0, cost: 0, models: {} },
-      google: { calls: 0, tokens: 0, cost: 0, models: {} }
+      openai: { calls: 0, tokens: 0, cost: 0, models: {}, rateLimits: 0, errors: 0 },
+      anthropic: { calls: 0, tokens: 0, cost: 0, models: {}, rateLimits: 0, errors: 0 },
+      google: { calls: 0, tokens: 0, cost: 0, models: {}, rateLimits: 0, errors: 0 },
+      mistral: { calls: 0, tokens: 0, cost: 0, models: {}, rateLimits: 0, errors: 0 },
+      ai21: { calls: 0, tokens: 0, cost: 0, models: {}, rateLimits: 0, errors: 0 }
     };
     this.poolStats = {
       paid: { calls: 0, cost: 0 },
@@ -19,6 +22,72 @@ export class LLMUsageTracker {
     this.agentUsage = {};
     this.totalCost = 0;
     this.startTime = Date.now();
+    this.rateLimitHits = [];
+    this.errors = [];
+    this.originalRequest = null;
+    this.refinedRequest = null;
+  }
+
+  /**
+   * Store the original user request
+   */
+  setOriginalRequest(request) {
+    this.originalRequest = request;
+  }
+
+  /**
+   * Store the refined request
+   */
+  setRefinedRequest(request) {
+    this.refinedRequest = request;
+  }
+
+  /**
+   * Record a rate limit hit
+   */
+  recordRateLimitHit({ provider, model, errorMessage, retryAfter = null }) {
+    const hit = {
+      timestamp: new Date().toISOString(),
+      provider,
+      model,
+      errorMessage,
+      retryAfter
+    };
+    this.rateLimitHits.push(hit);
+    
+    if (this.providerStats[provider]) {
+      this.providerStats[provider].rateLimits++;
+    }
+    
+    this.logger?.warn({
+      provider,
+      model,
+      retryAfter
+    }, "Rate limit hit recorded");
+  }
+
+  /**
+   * Record an API error
+   */
+  recordError({ provider, model, errorMessage, errorType = 'unknown' }) {
+    const error = {
+      timestamp: new Date().toISOString(),
+      provider,
+      model,
+      errorMessage,
+      errorType
+    };
+    this.errors.push(error);
+    
+    if (this.providerStats[provider]) {
+      this.providerStats[provider].errors++;
+    }
+    
+    this.logger?.error({
+      provider,
+      model,
+      errorType
+    }, errorMessage);
   }
 
   /**
@@ -276,6 +345,16 @@ export class LLMUsageTracker {
     console.log('📊 LLM USAGE REPORT');
     console.log('='.repeat(80));
     
+    // Show original and refined request if available
+    if (this.originalRequest) {
+      console.log('\n📝 ORIGINAL REQUEST:');
+      console.log(`  "${this.originalRequest.substring(0, 200)}${this.originalRequest.length > 200 ? '...' : ''}"`);
+    }
+    if (this.refinedRequest && this.refinedRequest !== this.originalRequest) {
+      console.log('\n✨ REFINED REQUEST:');
+      console.log(`  "${this.refinedRequest.substring(0, 200)}${this.refinedRequest.length > 200 ? '...' : ''}"`);
+    }
+    
     console.log('\n📈 SUMMARY:');
     console.log(`  Total LLM Calls: ${report.summary.totalCalls}`);
     console.log(`  Total Tokens: ${report.summary.totalTokens.toLocaleString()}`);
@@ -283,12 +362,42 @@ export class LLMUsageTracker {
     console.log(`  Duration: ${report.summary.durationMinutes} minutes`);
     console.log(`  Success Rate: ${report.summary.successRate}`);
     
+    // Show rate limits and errors if any
+    if (this.rateLimitHits.length > 0) {
+      console.log('\n⚠️  RATE LIMITS HIT:');
+      console.log(`  Total: ${this.rateLimitHits.length}`);
+      this.rateLimitHits.forEach(hit => {
+        console.log(`  - ${hit.provider}/${hit.model}: ${hit.errorMessage.substring(0, 60)}...`);
+        if (hit.retryAfter) {
+          console.log(`    Retry after: ${hit.retryAfter}s`);
+        }
+      });
+    }
+    
+    if (this.errors.length > 0) {
+      console.log('\n❌ ERRORS:');
+      console.log(`  Total: ${this.errors.length}`);
+      this.errors.slice(0, 5).forEach(err => {
+        console.log(`  - ${err.provider}/${err.model}: ${err.errorType}`);
+        console.log(`    ${err.errorMessage.substring(0, 80)}...`);
+      });
+      if (this.errors.length > 5) {
+        console.log(`  ... and ${this.errors.length - 5} more errors`);
+      }
+    }
+    
     console.log('\n🏢 PROVIDERS USED:');
     report.providers.forEach(p => {
       console.log(`\n  ${p.provider.toUpperCase()}:`);
       console.log(`    Calls: ${p.calls} (${p.percentage} of total cost)`);
       console.log(`    Tokens: ${p.tokens.toLocaleString()}`);
       console.log(`    Cost: $${p.cost}`);
+      if (this.providerStats[p.provider]?.rateLimits > 0) {
+        console.log(`    ⚠️ Rate Limits: ${this.providerStats[p.provider].rateLimits}`);
+      }
+      if (this.providerStats[p.provider]?.errors > 0) {
+        console.log(`    ❌ Errors: ${this.providerStats[p.provider].errors}`);
+      }
       console.log(`    Models:`);
       p.models.forEach(m => {
         console.log(`      - ${m.model}: ${m.calls} calls, ${m.tokens.toLocaleString()} tokens, $${m.cost}`);

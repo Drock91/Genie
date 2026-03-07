@@ -28,6 +28,12 @@ export class ManagerAgent extends BaseAgent {
       "- owner='frontend' for: HTML, CSS, JavaScript, user interfaces, web pages",
       "- owner='backend' for: server code, APIs, databases, scripts, media generation (png/jpg/gif/mp4/video)",
       "",
+      "CRITICAL: PRESERVE ALL USER DETAILS",
+      "- Include ALL specific requirements (prices, colors, features, names) in work item descriptions",
+      "- Do NOT summarize or simplify user requirements",
+      "- Each work item task should contain the relevant specific details from the user request",
+      "- If user specifies '$15 per signature' or 'navy blue', include those EXACT values in tasks",
+      "",
       "IMPORTANT: Creating text files (.txt, .md) should use kind='text' and owner='writer'",
       "IMPORTANT: Creating images or videos should use kind='code' and owner='backend'",
       "",
@@ -220,32 +226,8 @@ export class ManagerAgent extends BaseAgent {
           }
         });
 
-        // 4b. Add product image tasks when images are requested
-        const wantsImages = /\b(images?|photos?|assets?)\b/i.test(userInput || "");
-        if (wantsImages) {
-          const imageNames = [
-            "coffee-1.jpg",
-            "coffee-2.jpg",
-            "coffee-3.jpg",
-            "coffee-4.jpg",
-            "coffee-5.jpg",
-            "coffee-6.jpg"
-          ];
-
-          imageNames.forEach(name => {
-            const imagePath = `frontend/img/${name}`;
-            const normalized = imagePath.toLowerCase();
-            if (!filesInPlan.has(normalized) && !filesInPlan.has(name.toLowerCase())) {
-              planJson.workItems.push({
-                id: `image-${name}`,
-                owner: "backend",
-                file: imagePath,
-                task: `Generate product image ${imagePath} for the coffee catalog.`
-              });
-              this.info({ file: imagePath }, "Added image generation task to plan");
-            }
-          });
-        }
+        // 4b. Image tasks are now handled dynamically based on user request
+        // No hardcoded image names - let the frontend agent generate appropriate images
 
         // 5. Update required agents from template
         if (requirements.agentsNeeded) {

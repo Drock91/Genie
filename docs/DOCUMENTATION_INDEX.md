@@ -29,7 +29,8 @@
 | [guides/HOW_AGENTS_WORK.md](../guides/HOW_AGENTS_WORK.md) | How the agent system works |
 | [guides/README_AGENTS.md](../guides/README_AGENTS.md) | Agent system overview |
 | [src/agents/AGENT_TEMPLATE.js](../src/agents/AGENT_TEMPLATE.js) | How to create new agents |
-| [src/agentRegistry.js](../src/agentRegistry.js) | All 35 agents documented |
+| [src/agentRegistry.js](../src/agentRegistry.js) | All 42 agents documented |
+| [GENIE_IMPROVEMENTS_V2.md](./GENIE_IMPROVEMENTS_V2.md) | **NEW** - v2.0 improvements |
 
 ### Configuration & Setup
 | Document | Purpose |

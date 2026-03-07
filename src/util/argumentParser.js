@@ -14,6 +14,7 @@ export function parseArguments(argv) {
     researchOnly: false,
     power: null,
     input: '',
+    file: null,
     unknownArgs: []
   };
 
@@ -34,6 +35,11 @@ export function parseArguments(argv) {
     } else if (arg === '--power') {
       parsed.power = argv[i + 1]?.toLowerCase() ?? null;
       i++; // Skip next arg since we consumed it
+    } else if (arg.startsWith('--file=')) {
+      parsed.file = arg.split('=')[1] ?? null;
+    } else if (arg === '--file' || arg === '-f') {
+      parsed.file = argv[i + 1] ?? null;
+      i++; // Skip next arg since we consumed it
     } else if (arg.startsWith('--') || arg.startsWith('-')) {
       // Unknown flag
       parsed.unknownArgs.push(arg);
@@ -52,10 +58,11 @@ export function parseArguments(argv) {
  * @returns {Object} Validation result with {valid: boolean, error: string|null}
  */
 export function validateArguments(parsed) {
-  if (!parsed.input || parsed.input.trim().length === 0) {
+  // Allow either file or direct input
+  if ((!parsed.input || parsed.input.trim().length === 0) && !parsed.file) {
     return {
       valid: false,
-      error: 'No user input provided. Usage: npm start -- "build me X"'
+      error: 'No user input provided. Usage: npm start -- "build me X" OR npm start -- --file request.json'
     };
   }
 
@@ -82,11 +89,13 @@ Options:
   --interactive, -i     Enable interactive mode
   --research-only, -r   Research mode: consensus analysis only (no code/file generation)
   --power=LEVEL         Set builder power level (low, medium, high, maximum)
+  --file, -f FILE       Read request from JSON file (for multi-line inputs)
   
 Examples:
   npm start -- "build a calculator app"
   npm start -- --interactive "build a todo app in the output folder"
   npm start -- --research-only "research topic X and summarize findings"
   npm start -- --power=high "create a e-commerce platform"
+  npm start -- --file request.json
   `;
 }

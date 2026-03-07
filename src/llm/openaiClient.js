@@ -97,6 +97,21 @@ export async function llmJson({ model, system, user, schema, temperature = 0.2, 
     } catch (err) {
       lastError = err;
       if (logger) logger.warn({ attempt, error: err.message }, "LLM attempt failed");
+      
+      // Check for rate limit error and record it
+      const isRateLimit = err.message?.includes('rate') || 
+                          err.message?.includes('429') ||
+                          err.status === 429;
+      if (isRateLimit && global.llmUsageTracker) {
+        const retryAfter = err.headers?.['retry-after'] || null;
+        global.llmUsageTracker.recordRateLimitHit({
+          provider: 'openai',
+          model,
+          errorMessage: err.message,
+          retryAfter
+        });
+      }
+      
       if (attempt < MAX_RETRIES) {
         await sleep(RETRY_DELAY_MS * attempt);
       }

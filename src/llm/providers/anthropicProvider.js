@@ -113,6 +113,20 @@ export class AnthropicProvider {
       } catch (err) {
         lastError = err;
         log?.warn({ attempt, error: err.message }, "Anthropic attempt failed");
+        
+        // Check for rate limit error and record it
+        const isRateLimit = err.message?.includes('rate') || 
+                            err.message?.includes('429') ||
+                            err.status === 429;
+        if (isRateLimit && global.llmUsageTracker) {
+          global.llmUsageTracker.recordRateLimitHit({
+            provider: 'anthropic',
+            model,
+            errorMessage: err.message,
+            retryAfter: null
+          });
+        }
+        
         if (attempt < MAX_RETRIES) {
           await sleep(RETRY_DELAY_MS * attempt);
         }

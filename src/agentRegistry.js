@@ -316,6 +316,67 @@ export const AGENT_REGISTRY = {
       'Implement improvements'
     ],
     criticality: 'MEDIUM - Performance tuning'
+  },
+
+  // ============================================================================
+  // AUTONOMOUS OPERATIONS & WEB INTERACTION (4 agents)
+  // ============================================================================
+
+  webBrowser: {
+    name: 'WebBrowserAgent',
+    file: 'webBrowserAgent.js',
+    role: 'Autonomous Web Browsing',
+    purpose: 'LLM-guided web browsing, searching, scraping, and form interaction',
+    responsibilities: [
+      'Navigate any website',
+      'Search using any search engine',
+      'Extract structured data from pages',
+      'Fill forms and interact with web apps',
+      'Take screenshots for documentation'
+    ],
+    criticality: 'HIGH - Real-time web access'
+  },
+
+  taskAnalyzer: {
+    name: 'TaskAnalyzerAgent',
+    file: 'taskAnalyzerAgent.js',
+    role: 'Task Classification',
+    purpose: 'Analyzes user tasks to determine optimal agent routing',
+    responsibilities: [
+      'Classify task types',
+      'Identify required agents',
+      'Route to optimal handlers',
+      'Estimate complexity'
+    ],
+    criticality: 'HIGH - Intelligent routing'
+  },
+
+  incomeGeneration: {
+    name: 'IncomeGenerationAgent',
+    file: 'incomeGenerationAgent.js',
+    role: 'Income Opportunity Research',
+    purpose: 'Researches and identifies income opportunities, grants, contracts',
+    responsibilities: [
+      'Research funding opportunities',
+      'Identify contract opportunities',
+      'Find job listings',
+      'Analyze income potential'
+    ],
+    criticality: 'MEDIUM - Business development'
+  },
+
+  taskCompletionVerifier: {
+    name: 'TaskCompletionVerifierAgent',
+    file: 'taskCompletionVerifierAgent.js',
+    role: 'Task Verification',
+    purpose: 'Verifies task completion and validates output quality',
+    responsibilities: [
+      'Verify task completion',
+      'Validate output quality',
+      'Check acceptance criteria',
+      'Report completion status'
+    ],
+    criticality: 'MEDIUM - Quality assurance'
   }
 };
 
@@ -374,7 +435,8 @@ export function getAgentsByCategory(category) {
     qa: ['qa', 'tests', 'testGeneration', 'fixer'],
     security: ['security', 'securityHardening', 'monitoring'],
     documentation: ['apiDocumentation', 'writer'],
-    optimization: ['performanceOptimization']
+    optimization: ['performanceOptimization'],
+    autonomous: ['webBrowser', 'taskAnalyzer', 'incomeGeneration', 'taskCompletionVerifier']
   };
   
   return categoryMap[category] || [];

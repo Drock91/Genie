@@ -8,7 +8,7 @@
 
 ### Overview
 
-GENIE is an enterprise AI system composed of **20 specialized agents** coordinated by a central Manager agent. The system uses a **multi-LLM consensus engine** to ensure highest accuracy and reduce hallucination.
+GENIE is an enterprise AI system composed of **46 specialized agents** coordinated by a central Manager agent. The system uses a **multi-LLM consensus engine** to ensure highest accuracy and reduce hallucination. Includes **autonomous web browsing** capabilities for real-time data access.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐

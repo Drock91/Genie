@@ -107,6 +107,20 @@ export class MistralProvider {
       } catch (err) {
         lastError = err;
         log?.warn({ attempt, error: err.message }, "Mistral attempt failed");
+        
+        // Check for rate limit error and record it
+        const isRateLimit = err.message?.includes('rate') || 
+                            err.response?.status === 429;
+        if (isRateLimit && global.llmUsageTracker) {
+          const retryAfter = err.response?.headers?.['retry-after'] || null;
+          global.llmUsageTracker.recordRateLimitHit({
+            provider: 'mistral',
+            model,
+            errorMessage: err.message,
+            retryAfter
+          });
+        }
+        
         if (attempt < MAX_RETRIES) {
           await sleep(RETRY_DELAY_MS * attempt);
         }
