@@ -10,6 +10,7 @@ import GoogleProvider from "./providers/googleProvider.js";
 import MistralProvider from "./providers/mistralProvider.js";
 import AI21Provider from "./providers/ai21Provider.js";
 import GrokProvider from "./providers/grokProvider.js";
+import GroqProvider from "./providers/groqProvider.js";
 import { LLM_CONFIGS, LLM_POOLS, LLM_PROFILES } from "./multiLlmConfig.js";
 
 class MultiLlmSystem {
@@ -45,7 +46,8 @@ class MultiLlmSystem {
           google: !!process.env.GOOGLE_API_KEY,
           mistral: !!process.env.MISTRAL_API_KEY,
           ai21: !!process.env.AI21_API_KEY,
-          grok: !!process.env.GROK_API_KEY
+          grok: !!process.env.GROK_API_KEY,
+          groq: !!process.env.GROQ_API_KEY
         }
       }, "Provider API key status");
 
@@ -103,6 +105,15 @@ class MultiLlmSystem {
         this.logger?.info("Grok provider registered");
       } catch (err) {
         this.logger?.warn({ error: err.message }, "Failed to register Grok");
+      }
+
+      // Register Groq provider (FREE!)
+      try {
+        const groqProvider = new GroqProvider(this.logger);
+        this.orchestrator.registerProvider("groq", groqProvider);
+        this.logger?.info("Groq provider registered (FREE tier)");
+      } catch (err) {
+        this.logger?.warn({ error: err.message }, "Failed to register Groq");
       }
 
       // Check provider health

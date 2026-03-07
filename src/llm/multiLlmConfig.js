@@ -150,6 +150,32 @@ export const LLM_CONFIGS = {
     cost: "medium",
     latency: "fast",
     features: ["balanced", "real-time"]
+  },
+
+  // Groq Models (FREE TIER!)
+  GROQ_LLAMA_70B: {
+    provider: "groq",
+    model: "llama-3.3-70b-versatile",
+    type: "free",
+    cost: "free",
+    latency: "very-fast",
+    features: ["reasoning", "fast", "free"]
+  },
+  GROQ_LLAMA_8B: {
+    provider: "groq",
+    model: "llama-3.1-8b-instant",
+    type: "free",
+    cost: "free",
+    latency: "ultra-fast",
+    features: ["fast", "free", "instant"]
+  },
+  GROQ_MIXTRAL: {
+    provider: "groq",
+    model: "mixtral-8x7b-32768",
+    type: "free",
+    cost: "free",
+    latency: "very-fast",
+    features: ["balanced", "free", "long-context"]
   }
 };
 
@@ -159,9 +185,9 @@ export const LLM_CONFIGS = {
  */
 export const LLM_POOLS = {
   free: [
-    LLM_CONFIGS.OPENAI_GPT4O_MINI,
-    LLM_CONFIGS.MISTRAL_SMALL,
-    LLM_CONFIGS.AI21_J2_MID
+    LLM_CONFIGS.GROQ_LLAMA_70B,
+    LLM_CONFIGS.GROQ_MIXTRAL,
+    LLM_CONFIGS.GOOGLE_GEMINI_PRO
   ],
   paid: [
     LLM_CONFIGS.OPENAI_GPT4O,

@@ -78,6 +78,9 @@ ${c.cyan}╔══════════════════════�
   if (process.env.MISTRAL_API_KEY && !process.env.MISTRAL_API_KEY.includes('your-')) {
     providers.push({ name: 'Mistral', model: process.env.MISTRAL_MODEL || 'mistral-large' });
   }
+  if (process.env.GROQ_API_KEY && !process.env.GROQ_API_KEY.includes('your-')) {
+    providers.push({ name: 'Groq', model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', free: true });
+  }
   if (process.env.GROK_API_KEY && !process.env.GROK_API_KEY.includes('your-')) {
     providers.push({ name: 'Grok', model: process.env.GROK_MODEL || 'grok-3-latest' });
   }
@@ -85,7 +88,8 @@ ${c.cyan}╔══════════════════════�
   if (providers.length > 0) {
     console.log(`${c.green}✓${c.reset} ${c.bright}${providers.length} Provider(s) Configured${c.reset}\n`);
     providers.forEach(p => {
-      console.log(`  ${c.green}●${c.reset} ${p.name}: ${c.gray}${p.model}${c.reset}`);
+      const freeTag = p.free ? ` ${c.green}[FREE]${c.reset}` : '';
+      console.log(`  ${c.green}●${c.reset} ${p.name}: ${c.gray}${p.model}${c.reset}${freeTag}`);
     });
   } else {
     console.log(`${c.yellow}⚠${c.reset} ${c.bright}No providers configured${c.reset}`);
@@ -170,6 +174,22 @@ ${c.cyan}╔══════════════════════�
         });
         const data = await response.json();
         console.log(`${c.green}✓${c.reset} Response: "${data.choices[0].message.content}"`);
+      }
+      // Quick Groq test (FREE!)
+      else if (providers[0].name === 'Groq') {
+        const { default: OpenAI } = await import('openai');
+        const client = new OpenAI({ 
+          apiKey: process.env.GROQ_API_KEY,
+          baseURL: 'https://api.groq.com/openai/v1'
+        });
+        
+        const response = await client.chat.completions.create({
+          model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: 'Say "GENIE is operational!" in 4 words max.' }],
+          max_tokens: 20
+        });
+        
+        console.log(`${c.green}✓${c.reset} Response: "${response.choices[0].message.content}" ${c.green}[FREE]${c.reset}`);
       }
       // Quick Grok test
       else if (providers[0].name === 'Grok') {
