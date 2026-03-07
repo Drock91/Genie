@@ -9,6 +9,7 @@ import AnthropicProvider from "./providers/anthropicProvider.js";
 import GoogleProvider from "./providers/googleProvider.js";
 import MistralProvider from "./providers/mistralProvider.js";
 import AI21Provider from "./providers/ai21Provider.js";
+import GrokProvider from "./providers/grokProvider.js";
 import { LLM_CONFIGS, LLM_POOLS, LLM_PROFILES } from "./multiLlmConfig.js";
 
 class MultiLlmSystem {
@@ -43,7 +44,8 @@ class MultiLlmSystem {
           anthropic: !!process.env.ANTHROPIC_API_KEY,
           google: !!process.env.GOOGLE_API_KEY,
           mistral: !!process.env.MISTRAL_API_KEY,
-          ai21: !!process.env.AI21_API_KEY
+          ai21: !!process.env.AI21_API_KEY,
+          grok: !!process.env.GROK_API_KEY
         }
       }, "Provider API key status");
 
@@ -92,6 +94,15 @@ class MultiLlmSystem {
         this.logger?.info("AI21 provider registered");
       } catch (err) {
         this.logger?.warn({ error: err.message }, "Failed to register AI21");
+      }
+
+      // Register Grok (xAI) provider
+      try {
+        const grokProvider = new GrokProvider(this.logger);
+        this.orchestrator.registerProvider("grok", grokProvider);
+        this.logger?.info("Grok provider registered");
+      } catch (err) {
+        this.logger?.warn({ error: err.message }, "Failed to register Grok");
       }
 
       // Check provider health

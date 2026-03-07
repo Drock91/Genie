@@ -124,6 +124,32 @@ export const LLM_CONFIGS = {
     cost: "low",
     latency: "fast",
     features: ["balanced"]
+  },
+
+  // Grok (xAI) Models
+  GROK_3: {
+    provider: "grok",
+    model: "grok-3-latest",
+    type: "paid",
+    cost: "high",
+    latency: "fast",
+    features: ["reasoning", "real-time", "latest"]
+  },
+  GROK_3_FAST: {
+    provider: "grok",
+    model: "grok-3-fast-latest",
+    type: "paid",
+    cost: "medium",
+    latency: "very-fast",
+    features: ["fast", "real-time"]
+  },
+  GROK_2: {
+    provider: "grok",
+    model: "grok-2-latest",
+    type: "paid",
+    cost: "medium",
+    latency: "fast",
+    features: ["balanced", "real-time"]
   }
 };
 
@@ -142,7 +168,8 @@ export const LLM_POOLS = {
     LLM_CONFIGS.CLAUDE_OPUS,
     LLM_CONFIGS.GOOGLE_GEMINI_PRO,
     LLM_CONFIGS.MISTRAL_LARGE,
-    LLM_CONFIGS.AI21_J2_ULTRA
+    LLM_CONFIGS.AI21_J2_ULTRA,
+    LLM_CONFIGS.GROK_3
   ]
 };
 
@@ -189,7 +216,23 @@ export const LLM_PROFILES = {
     LLM_CONFIGS.OPENAI_GPT4O,
     LLM_CONFIGS.CLAUDE_OPUS,
     LLM_CONFIGS.MISTRAL_LARGE,
-    LLM_CONFIGS.AI21_JAMBA_ULTRA
+    LLM_CONFIGS.GROK_3
+  ],
+
+  // Maximum diversity with 5 providers
+  max_consensus: [
+    LLM_CONFIGS.OPENAI_GPT4O,
+    LLM_CONFIGS.CLAUDE_OPUS,
+    LLM_CONFIGS.GROK_3,
+    LLM_CONFIGS.MISTRAL_LARGE,
+    LLM_CONFIGS.GOOGLE_GEMINI_PRO
+  ],
+
+  // Grok-focused for real-time reasoning
+  grok_focus: [
+    LLM_CONFIGS.GROK_3,
+    LLM_CONFIGS.OPENAI_GPT4O,
+    LLM_CONFIGS.CLAUDE_SONNET
   ],
 
   // Two-model consensus for quick decisions
