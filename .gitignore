@@ -3,15 +3,14 @@
 !.env.example
 node_modules/
 
+# Personal workspace - each user's custom tools (not committed)
+my-workspace/
+
 # Ignore runtime/output folders
 logs/
-requests/
-output/
-reports/
 
-# Ignore testing and examples (development only)
+# Ignore testing (development only)
 testing/
-examples/
 
 # Ignore temporary files
 .temp_run_output.txt
