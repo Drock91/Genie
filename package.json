@@ -5,6 +5,9 @@
   "main": "src/index.js",
   "description": "Fully operational AI company with 20+ specialist agents and multi-LLM consensus",
   "scripts": {
+    "setup": "node setup.js",
+    "quickstart": "node quickstart.js",
+    "verify": "node verify-genie-system.js",
     "start": "node src/index.js",
     "research": "node src/index.js --research-only",
     "dev": "node --watch src/index.js",
